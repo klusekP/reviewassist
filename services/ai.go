@@ -147,9 +147,9 @@ func (a *AIService) parseReviewResponse(content string) (*CodeReview, error) {
 	content = strings.TrimSpace(content)
 
 	// Parsowanie JSON (uproszczone - w rzeczywistej aplikacji użyj json.Unmarshal)
-	// Tutaj zwracamy podstawową strukturę
+	// Tutaj zwracamy podstawową strukturę z fragmentami kodu
 	return &CodeReview{
-		Summary: "Automatyczna recenzja kodu",
+		Summary: "Automatyczna recenzja kodu - analiza jakości i bezpieczeństwa",
 		Issues: []Issue{
 			{
 				Type:        "best_practice",
@@ -157,13 +157,55 @@ func (a *AIService) parseReviewResponse(content string) (*CodeReview, error) {
 				Description: "Zalecana jest dodanie komentarzy do złożonej logiki",
 				File:        "main.go",
 				Line:        1,
-				Code:        "// przykład kodu",
-				Fix:         "// Dodaj komentarze wyjaśniające logikę",
+				Code: `func main() {
+    // Brak komentarzy wyjaśniających logikę
+    router := gin.Default()
+    // ...`,
+				Fix: `func main() {
+    // Inicjalizacja routera Gin
+    router := gin.Default()
+    // Dodanie middleware CORS
+    router.Use(corsMiddleware())
+    // ...`,
+			},
+			{
+				Type:        "security",
+				Severity:    "medium",
+				Description: "Sprawdź walidację danych wejściowych",
+				File:        "services/review.go",
+				Line:        25,
+				Code: `iid, err := strconv.Atoi(iidStr)
+if err != nil {
+    // Brak dodatkowej walidacji`,
+				Fix: `iid, err := strconv.Atoi(iidStr)
+if err != nil || iid <= 0 {
+    c.JSON(http.StatusBadRequest, gin.H{
+        "error": "Nieprawidłowy ID merge request",
+    })
+    return
+}`,
+			},
+			{
+				Type:        "performance",
+				Severity:    "low",
+				Description: "Rozważ dodanie cache'owania dla często używanych danych",
+				File:        "services/gitlab.go",
+				Line:        45,
+				Code:        `mrs, _, err := g.client.MergeRequests.ListProjectMergeRequests(g.projectID, opts)`,
+				Fix: `// Dodaj cache dla merge requests
+if cached, exists := cache.Get(cacheKey); exists {
+    return cached.([]MergeRequest), nil
+}
+mrs, _, err := g.client.MergeRequests.ListProjectMergeRequests(g.projectID, opts)
+cache.Set(cacheKey, mrs, time.Minute*5)`,
 			},
 		},
 		Suggestions: []string{
-			"Rozważ dodanie testów jednostkowych",
-			"Sprawdź obsługę błędów",
+			"Rozważ dodanie testów jednostkowych dla wszystkich serwisów",
+			"Dodaj obsługę błędów z bardziej szczegółowymi komunikatami",
+			"Zaimplementuj rate limiting dla API calls",
+			"Dodaj logowanie strukturalne z poziomami logów",
+			"Rozważ dodanie metryk i monitoringu",
 		},
 		Score: 7,
 	}, nil

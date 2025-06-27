@@ -243,6 +243,27 @@
             color: #333;
         }
 
+        .review-files {
+            margin-bottom: 15px;
+        }
+
+        .review-files ul {
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+
+        .review-files li {
+            margin-bottom: 3px;
+        }
+
+        .review-files code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            color: #495057;
+        }
+
         .review-issues {
             margin-bottom: 15px;
         }
@@ -288,6 +309,36 @@
             font-size: 0.8em;
             color: #999;
             font-family: monospace;
+        }
+
+        .issue-code {
+            margin-top: 10px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .issue-code pre {
+            margin: 0;
+            font-size: 0.9em;
+            color: #333;
+            overflow-x: auto;
+        }
+
+        .issue-fix {
+            margin-top: 10px;
+            background: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .issue-fix pre {
+            margin: 5px 0 0 0;
+            font-size: 0.9em;
+            color: #155724;
+            overflow-x: auto;
         }
 
         .review-suggestions ul {
@@ -512,6 +563,8 @@
                     </div>
                     <div class="issue-description">${issue.description}</div>
                     ${issue.file ? `<div class="issue-file">Plik: ${issue.file}:${issue.line}</div>` : ''}
+                    ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ''}
+                    ${issue.fix ? `<div class="issue-fix"><strong>Sugerowana poprawka:</strong><pre><code>${issue.fix}</code></pre></div>` : ''}
                 </div>
             `).join('');
 
@@ -523,6 +576,14 @@
                 <div class="review-result">
                     <div class="review-score">Ocena: ${review.score}/10</div>
                     <div class="review-summary">${review.summary}</div>
+                    <div class="review-files">
+                        <h4>Przeanalizowane pliki:</h4>
+                        <ul>
+                            ${Array.from(new Set(review.issues.map(issue => issue.file).filter(f => f))).map(file => 
+                                `<li><code>${file}</code></li>`
+                            ).join('')}
+                        </ul>
+                    </div>
                     <div class="review-issues">
                         <h4>Znalezione problemy (${review.issues.length}):</h4>
                         ${issuesHtml}
