@@ -1,43 +1,43 @@
 # Simple Code Review AI
 
-Aplikacja AI do automatycznego code review Merge Requests w GitLab. Aplikacja analizuje zmiany w kodzie za pomocą OpenAI GPT-4 i wyświetla wyniki recenzji w interfejsie webowym.
+AI application for automatic code review of GitLab Merge Requests. The application analyzes code changes using OpenAI GPT-4 and displays review results in a web interface.
 
-## Funkcjonalności
+## Features
 
-- 🔍 **Automatyczna analiza kodu** - AI analizuje zmiany w Merge Requestach
-- 🤖 **Inteligentne komentarze** - Wyświetla szczegółowe komentarze do konkretnych linii kodu
-- 🛡️ **Bezpieczeństwo** - Sprawdza potencjalne problemy bezpieczeństwa
-- ⚡ **Wydajność** - Analizuje optymalizację kodu
-- 📝 **Best Practices** - Sprawdza zgodność z dobrymi praktykami
-- 📊 **Ocena jakości** - Generuje ocenę jakości kodu (1-10)
-- 💾 **Lokalne przechowywanie** - Wyniki recenzji są zapisywane lokalnie w przeglądarce
-- 🔒 **Prywatność** - Komentarze nie są automatycznie wysyłane do GitLab
+- 🔍 **Automatic code analysis** - AI analyzes changes in Merge Requests
+- 🤖 **Intelligent comments** - Displays detailed comments for specific code lines
+- 🛡️ **Security** - Checks for potential security issues
+- ⚡ **Performance** - Analyzes code optimization
+- 📝 **Best Practices** - Checks compliance with good practices
+- 📊 **Quality assessment** - Generates code quality score (1-10)
+- 💾 **Local storage** - Review results are saved locally in the browser
+- 🔒 **Privacy** - Comments are not automatically sent to GitLab
 
-## Wymagania
+## Requirements
 
 - Go 1.21+
 - GitLab Personal Access Token
 - OpenAI API Key
 
-## Instalacja
+## Installation
 
-1. **Sklonuj repozytorium:**
+1. **Clone the repository:**
 ```bash
 git clone <repository-url>
 cd codereviewAI
 ```
 
-2. **Zainstaluj zależności:**
+2. **Install dependencies:**
 ```bash
 go mod tidy
 ```
 
-3. **Skonfiguruj zmienne środowiskowe:**
+3. **Configure environment variables:**
 ```bash
 cp env.example .env
 ```
 
-Edytuj plik `.env` i dodaj swoje klucze API:
+Edit the `.env` file and add your API keys:
 ```env
 GITLAB_TOKEN=your_gitlab_personal_access_token
 GITLAB_URL=https://gitlab.com
@@ -46,30 +46,30 @@ OPENAI_API_KEY=your_openai_api_key
 PORT=8080
 ```
 
-4. **Uruchom aplikację:**
+4. **Run the application:**
 ```bash
 go run main.go
 ```
 
-## Konfiguracja GitLab
+## GitLab Configuration
 
-1. **Utwórz Personal Access Token:**
-   - Przejdź do GitLab → Settings → Access Tokens
-   - Utwórz token z uprawnieniami: `api`, `read_user`, `read_repository`
-   - Skopiuj token do zmiennej `GITLAB_TOKEN`
+1. **Create Personal Access Token:**
+   - Go to GitLab → Settings → Access Tokens
+   - Create a token with permissions: `api`, `read_user`, `read_repository`
+   - Copy the token to the `GITLAB_TOKEN` variable
 
-2. **Znajdź Project ID:**
-   - Przejdź do swojego projektu w GitLab
-   - Project ID znajduje się na stronie głównej projektu
-   - Dodaj do zmiennej `GITLAB_PROJECT_ID`
+2. **Find Project ID:**
+   - Go to your project in GitLab
+   - Project ID is located on the project's main page
+   - Add to the `GITLAB_PROJECT_ID` variable
 
-## Konfiguracja OpenAI
+## OpenAI Configuration
 
-1. **Utwórz konto OpenAI:**
-   - Przejdź do [OpenAI](https://platform.openai.com/)
-   - Utwórz konto i dodaj środki
-   - Wygeneruj API Key
-   - Dodaj do zmiennej `OPENAI_API_KEY`
+1. **Create OpenAI account:**
+   - Go to [OpenAI](https://platform.openai.com/)
+   - Create an account and add funds
+   - Generate API Key
+   - Add to the `OPENAI_API_KEY` variable
 
 ## API Endpoints
 
@@ -78,122 +78,118 @@ go run main.go
 GET /api/v1/health
 ```
 
-### Lista Merge Requests
+### List Merge Requests
 ```http
 GET /api/v1/merge-requests?state=opened
 ```
 
-### Szczegóły Merge Request
+### Merge Request Details
 ```http
 GET /api/v1/merge-requests/{id}
 ```
 
-### Automatyczna recenzja (lokalna)
+### Automatic review (local)
 ```http
 POST /api/v1/merge-requests/{id}/review
 ```
 
-### Lista projektów
+### List projects
 ```http
 GET /api/v1/projects
 ```
 
-## Przykład użycia
+## Usage Example
 
-1. **Pobierz listę otwartych Merge Requests:**
+1. **Get list of open Merge Requests:**
 ```bash
 curl http://localhost:8080/api/v1/merge-requests
 ```
 
-2. **Przeprowadź automatyczną recenzję:**
+2. **Perform automatic review:**
 ```bash
 curl -X POST http://localhost:8080/api/v1/merge-requests/123/review
 ```
 
-## Struktura projektu
+## Project Structure
 
 ```
 codereviewAI/
-├── main.go              # Główny plik aplikacji
+├── main.go              # Main application file
 ├── services/
-│   ├── gitlab.go        # Serwis GitLab API
-│   ├── ai.go           # Serwis OpenAI AI
-│   └── review.go       # Serwis recenzji
+│   ├── gitlab.go        # GitLab API service
+│   ├── ai.go           # OpenAI AI service
+│   └── review.go       # Review service
 ├── static/
-│   └── index.html      # Interfejs webowy
-├── go.mod              # Zależności Go
-├── env.example         # Przykład konfiguracji
-└── README.md           # Dokumentacja
+│   └── index.html      # Web interface
+├── go.mod              # Go dependencies
+├── env.example         # Configuration example
+└── README.md           # Documentation
 ```
 
-## Jak to działa
+## How it works
 
-1. **Pobieranie danych:** Aplikacja łączy się z GitLab API i pobiera Merge Request wraz z diff
-2. **Analiza AI:** Kod jest analizowany przez OpenAI GPT-4 z kontekstem zmian
-3. **Generowanie komentarzy:** AI generuje szczegółowe komentarze do konkretnych linii
-4. **Wyświetlanie wyników:** Komentarze są wyświetlane w interfejsie webowym i zapisywane lokalnie
+1. **Data retrieval:** Application connects to GitLab API and retrieves Merge Request with diff
+2. **AI analysis:** Code is analyzed by OpenAI GPT-4 with change context
+3. **Comment generation:** AI generates detailed comments for specific lines
+4. **Result display:** Comments are displayed in web interface and saved locally
 
-## Typy problemów wykrywane przez AI
+## Types of issues detected by AI
 
-- 🐛 **Błędy** - Problemy logiczne i składniowe
-- 🛡️ **Bezpieczeństwo** - SQL injection, XSS, etc.
-- ⚡ **Wydajność** - Problemy z optymalizacją
-- 📝 **Styl** - Zgodność z konwencjami kodowania
-- ✅ **Best Practices** - Zgodność z dobrymi praktykami
+- 🐛 **Bugs** - Logical and syntax problems
+- 🛡️ **Security** - SQL injection, XSS, etc.
+- ⚡ **Performance** - Optimization issues
+- 📝 **Style** - Coding convention compliance
+- ✅ **Best Practices** - Good practice compliance
 
-## Poziomy ważności
+## Severity levels
 
-- **Low** - Drobne sugestie i ulepszenia
-- **Medium** - Problemy, które warto naprawić
-- **High** - Ważne problemy wymagające uwagi
-- **Critical** - Krytyczne problemy bezpieczeństwa lub funkcjonalności
+- **Low** - Minor suggestions and improvements
+- **Medium** - Issues worth fixing
+- **High** - Important issues requiring attention
+- **Critical** - Critical security or functionality issues
 
-## Funkcje interfejsu webowego
+## Web interface features
 
-- **Przeglądanie MR:** Lista wszystkich otwartych Merge Requests
-- **Automatyczna recenzja:** Jednoklikowa analiza AI
-- **Lokalne przechowywanie:** Wyniki recenzji są zapisywane w przeglądarce
-- **Statystyki:** Liczba przejrzanych MR, średnia ocena, liczba problemów
-- **Responsywny design:** Działa na urządzeniach mobilnych
+- **MR browsing:** List of all open Merge Requests
+- **Automatic review:** One-click AI analysis
+- **Local storage:** Review results are saved in the browser
+- **Statistics:** Number of reviewed MRs, average score, number of issues
+- **Responsive design:** Works on mobile devices
 
-## Rozwój
+## Development
 
-### Dodanie nowych funkcji
+### Adding new features
 
-1. **Nowe typy analizy** - Dodaj nowe kategorie w `services/ai.go`
-2. **Dodatkowe endpointy** - Rozszerz `services/review.go`
-3. **Integracje** - Dodaj wsparcie dla innych platform (GitHub, Bitbucket)
-4. **Baza danych** - Dodaj trwałe przechowywanie wyników recenzji
+1. **New analysis types** - Add new categories in `services/ai.go`
+2. **Additional endpoints** - Extend `services/review.go`
+3. **Integrations** - Add support for other platforms (GitHub, Bitbucket)
+4. **Database** - Add persistent storage for review results
 
-### Testowanie
+### Testing
 
 ```bash
-# Uruchom testy
+# Run tests
 go test ./...
 
-# Test z przykładowymi danymi
+# Test with sample data
 curl http://localhost:8080/api/v1/health
 ```
 
-## Licencja
+## License
 
 MIT License
 
-## Wsparcie
+## Support
 
-W przypadku problemów:
-1. Sprawdź logi aplikacji
-2. Zweryfikuj konfigurację zmiennych środowiskowych
-3. Sprawdź uprawnienia GitLab token
-4. Zweryfikuj saldo OpenAI API
+In case of problems:
+1. Check application logs
+2. Verify environment variable configuration
+3. Check GitLab token permissions
+4. Verify OpenAI API balance
 
 ## Roadmap
 
-- [ ] Wsparcie dla GitHub
-- [ ] Integracja z Slack/Discord
-- [ ] Baza danych dla wyników recenzji
-- [ ] Konfiguracja reguł recenzji
-- [ ] Historia recenzji
-- [ ] Statystyki jakości kodu
-- [ ] Eksport wyników do PDF
-- [ ] Integracja z CI/CD 
+- [ ] GitHub support
+- [ ] Review rules configuration
+- [ ] Review history
+- [ ] Code quality statistics
