@@ -1,17 +1,22 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/sashabaranov/go-openai"
-	"github.com/sirupsen/logrus"
 )
 
 type AIService struct {
-	client *openai.Client
+	openaiClient *openai.Client
+	claudeAPIKey string
+	model        string // "openai" lub "claude"
 }
 
 type CodeReview struct {
@@ -31,18 +36,62 @@ type Issue struct {
 	Fix         string `json:"fix"`
 }
 
+// Claude API request/response structures
+type ClaudeRequest struct {
+	Model       string    `json:"model"`
+	MaxTokens   int       `json:"max_tokens"`
+	Temperature float64   `json:"temperature"`
+	Messages    []Message `json:"messages"`
+}
+
+type Message struct {
+	Role    string    `json:"role"`
+	Content []Content `json:"content"`
+}
+
+type Content struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type ClaudeResponse struct {
+	Content []ClaudeContent `json:"content"`
+}
+
+type ClaudeContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 func NewAIService() *AIService {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	client := openai.NewClient(apiKey)
+	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+	claudeAPIKey := os.Getenv("CLAUDE_API_KEY")
+	model := os.Getenv("AI_MODEL")
+
+	if model == "" {
+		model = "openai" // domyślnie OpenAI
+	}
+
+	var openaiClient *openai.Client
+	if openaiAPIKey != "" {
+		openaiClient = openai.NewClient(openaiAPIKey)
+	}
 
 	return &AIService{
-		client: client,
+		openaiClient: openaiClient,
+		claudeAPIKey: claudeAPIKey,
+		model:        model,
 	}
 }
 
 func (a *AIService) ReviewCode(diffs []Diff, mrTitle, mrDescription string) (*CodeReview, error) {
 	// Przygotowanie kontekstu dla AI
 	contextStr := a.buildContext(diffs, mrTitle, mrDescription)
+
+	// Sprawdź długość kontekstu i skróć jeśli potrzeba
+	if len(contextStr) > 3000 {
+		contextStr = contextStr[:3000] + "\n\n[Kod został skrócony ze względu na limit tokenów]"
+	}
 
 	// Prompt dla AI
 	prompt := `Jesteś doświadczonym programistą i code reviewerem. Przeanalizuj poniższe zmiany w kodzie i przeprowadź szczegółową recenzję.
@@ -80,11 +129,26 @@ Opis MR: ` + mrDescription + `
 Zmiany w kodzie:
 ` + contextStr
 
-	// Wywołanie OpenAI API
-	resp, err := a.client.CreateChatCompletion(
+	// Wybierz model i przeprowadź recenzję
+	switch a.model {
+	case "claude":
+		return a.reviewWithClaude(prompt)
+	case "openai":
+		fallthrough
+	default:
+		return a.reviewWithOpenAI(prompt)
+	}
+}
+
+func (a *AIService) reviewWithOpenAI(prompt string) (*CodeReview, error) {
+	if a.openaiClient == nil {
+		return nil, fmt.Errorf("OpenAI client nie jest skonfigurowany")
+	}
+
+	resp, err := a.openaiClient.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
+			Model: openai.GPT3Dot5Turbo,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
@@ -96,7 +160,7 @@ Zmiany w kodzie:
 				},
 			},
 			Temperature: 0.3,
-			MaxTokens:   4000,
+			MaxTokens:   2000,
 		},
 	)
 
@@ -108,20 +172,80 @@ Zmiany w kodzie:
 		return nil, fmt.Errorf("brak odpowiedzi z OpenAI API")
 	}
 
-	// Parsowanie odpowiedzi JSON
 	content := resp.Choices[0].Message.Content
-	review, err := a.parseReviewResponse(content)
-	if err != nil {
-		logrus.Warnf("Błąd parsowania odpowiedzi AI: %v", err)
-		// Fallback - zwróć podstawową recenzję
-		return a.createFallbackReview(diffs), nil
+	return a.parseReviewResponse(content)
+}
+
+func (a *AIService) reviewWithClaude(prompt string) (*CodeReview, error) {
+	if a.claudeAPIKey == "" {
+		return nil, fmt.Errorf("Claude API key nie jest skonfigurowany")
 	}
 
-	return review, nil
+	requestBody := ClaudeRequest{
+		Model:       "claude-sonnet-4-20250514",
+		MaxTokens:   2000,
+		Temperature: 0.3,
+		Messages: []Message{
+			{
+				Role: "user",
+				Content: []Content{
+					{
+						Type: "text",
+						Text: "Jesteś ekspertem w code review. Odpowiadaj tylko w formacie JSON.\n\n" + prompt,
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("błąd marshalowania request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("błąd tworzenia request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", a.claudeAPIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("błąd wywołania Claude API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("błąd Claude API: %s - %s", resp.Status, string(body))
+	}
+
+	var claudeResp ClaudeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
+		return nil, fmt.Errorf("błąd dekodowania odpowiedzi Claude: %v", err)
+	}
+
+	if len(claudeResp.Content) == 0 {
+		return nil, fmt.Errorf("brak odpowiedzi z Claude API")
+	}
+
+	content := claudeResp.Content[0].Text
+	return a.parseReviewResponse(content)
 }
 
 func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) string {
 	var context strings.Builder
+
+	// Ogranicz liczbę diffów do pierwszych 5
+	maxDiffs := 5
+	if len(diffs) > maxDiffs {
+		context.WriteString(fmt.Sprintf("Pokazano pierwsze %d z %d plików:\n\n", maxDiffs, len(diffs)))
+		diffs = diffs[:maxDiffs]
+	}
 
 	for _, diff := range diffs {
 		context.WriteString(fmt.Sprintf("\nPlik: %s\n", diff.NewPath))
@@ -132,8 +256,15 @@ func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) st
 		} else if diff.RenamedFile {
 			context.WriteString(fmt.Sprintf("(PRZENIESIONY Z: %s)\n", diff.OldPath))
 		}
+
+		// Skróć diff jeśli jest za długi
+		diffContent := diff.Diff
+		if len(diffContent) > 1000 {
+			diffContent = diffContent[:1000] + "\n\n[Diff został skrócony...]"
+		}
+
 		context.WriteString("Diff:\n")
-		context.WriteString(diff.Diff)
+		context.WriteString(diffContent)
 		context.WriteString("\n")
 	}
 
