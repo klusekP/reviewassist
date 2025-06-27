@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -405,7 +405,7 @@
     <div class="container">
       <div class="header">
         <h1>🤖 Code Review AI</h1>
-        <p>Automatyczna recenzja kodu z GitLab i AI</p>
+        <p>Automatic code review with GitLab and AI</p>
       </div>
 
       <div class="content">
@@ -418,22 +418,22 @@
           </div>
           <div class="stat-card">
             <div class="stat-number" id="reviewedMRs">-</div>
-            <div class="stat-label">Przejrzane</div>
+            <div class="stat-label">Reviewed</div>
           </div>
           <div class="stat-card">
             <div class="stat-number" id="avgScore">-</div>
-            <div class="stat-label">Średnia ocena</div>
+            <div class="stat-label">Average Score</div>
           </div>
           <div class="stat-card">
             <div class="stat-number" id="totalIssues">-</div>
-            <div class="stat-label">Znalezione problemy</div>
+            <div class="stat-label">Issues Found</div>
           </div>
         </div>
 
         <div class="section">
           <h2>Merge Requests</h2>
           <div id="mergeRequests" class="merge-requests">
-            <div class="loading">Ładowanie...</div>
+            <div class="loading">Loading...</div>
           </div>
         </div>
       </div>
@@ -453,7 +453,7 @@
       }
 
       function formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString("pl-PL", {
+        return new Date(dateString).toLocaleDateString("en-US", {
           year: "numeric",
           month: "short",
           day: "numeric",
@@ -507,10 +507,10 @@
           const response = await fetch(
             `${API_BASE}/merge-requests?state=opened`,
           );
-          if (!response.ok) throw new Error("Błąd pobierania MR");
+          if (!response.ok) throw new Error("Error fetching MRs");
           return await response.json();
         } catch (error) {
-          console.error("Błąd:", error);
+          console.error("Error:", error);
           throw error;
         }
       }
@@ -523,10 +523,10 @@
               method: "POST",
             },
           );
-          if (!response.ok) throw new Error("Błąd recenzji");
+          if (!response.ok) throw new Error("Review error");
           return await response.json();
         } catch (error) {
-          console.error("Błąd:", error);
+          console.error("Error:", error);
           throw error;
         }
       }
@@ -541,17 +541,17 @@
                         <div class="mr-title">${mr.title}</div>
                         <div class="mr-id">#${mr.iid}</div>
                     </div>
-                    <div class="mr-author">Autor: ${mr.author.name}</div>
+                    <div class="mr-author">Author: ${mr.author.name}</div>
                     <div class="mr-branches">
                         <div class="branch">${mr.source_branch} → ${mr.target_branch}</div>
                     </div>
-                    ${hasReview ? `<div class="review-status status-reviewed">✓ Przejrzane (${formatDate(reviewResult.timestamp)})</div>` : ""}
+                    ${hasReview ? `<div class="review-status status-reviewed">✓ Reviewed (${formatDate(reviewResult.timestamp)})</div>` : ""}
                     <div class="mr-actions">
-                        <button class="btn btn-primary" onclick="viewMR(${mr.iid})">Szczegóły</button>
+                        <button class="btn btn-primary" onclick="viewMR(${mr.iid})">Details</button>
                         <button class="btn btn-success" onclick="reviewMR(${mr.iid})" ${hasReview ? "disabled" : ""}>
-                            ${hasReview ? "Przejrzane" : "Recenzja AI"}
+                            ${hasReview ? "Reviewed" : "AI Review"}
                         </button>
-                        ${hasReview ? `<button class="btn btn-secondary" onclick="clearReview(${mr.iid})">Wyczyść</button>` : ""}
+                        ${hasReview ? `<button class="btn btn-secondary" onclick="clearReview(${mr.iid})">Clear</button>` : ""}
                         <a href="${mr.web_url}" target="_blank" class="btn btn-secondary">GitLab</a>
                     </div>
                     <div id="review-result-${mr.iid}">
@@ -571,9 +571,9 @@
                         <span class="issue-severity">(${issue.severity})</span>
                     </div>
                     <div class="issue-description">${issue.description}</div>
-                    ${issue.file ? `<div class="issue-file">Plik: ${issue.file}:${issue.line}</div>` : ""}
+                    ${issue.file ? `<div class="issue-file">File: ${issue.file}:${issue.line}</div>` : ""}
                     ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ""}
-                    ${issue.fix ? `<div class="issue-fix"><strong>Sugerowana poprawka:</strong><pre><code>${issue.fix}</code></pre></div>` : ""}
+                    ${issue.fix ? `<div class="issue-fix"><strong>Suggested fix:</strong><pre><code>${issue.fix}</code></pre></div>` : ""}
                 </div>
             `,
           )
@@ -585,10 +585,10 @@
 
         return `
                 <div class="review-result">
-                    <div class="review-score">Ocena: ${review.score}/10</div>
+                    <div class="review-score">Score: ${review.score}/10</div>
                     <div class="review-summary">${review.summary}</div>
                     <div class="review-files">
-                        <h4>Przeanalizowane pliki:</h4>
+                        <h4>Analyzed files:</h4>
                         <ul>
                             ${Array.from(
                               new Set(
@@ -602,11 +602,11 @@
                         </ul>
                     </div>
                     <div class="review-issues">
-                        <h4>Znalezione problemy (${review.issues.length}):</h4>
+                        <h4>Issues found (${review.issues.length}):</h4>
                         ${issuesHtml}
                     </div>
                     <div class="review-suggestions">
-                        <h4>Sugestie:</h4>
+                        <h4>Suggestions:</h4>
                         <ul>${suggestionsHtml}</ul>
                     </div>
                 </div>
@@ -617,9 +617,9 @@
         try {
           const response = await fetch(`${API_BASE}/merge-requests/${iid}`);
           const data = await response.json();
-          showMessage(`Pobrano szczegóły MR #${iid}`, "success");
+          showMessage(`Retrieved MR #${iid} details`, "success");
         } catch (error) {
-          showMessage(`Błąd pobierania MR #${iid}: ${error.message}`, "error");
+          showMessage(`Error fetching MR #${iid}: ${error.message}`, "error");
         }
       }
 
@@ -628,7 +628,7 @@
         const originalText = button.textContent;
 
         try {
-          button.textContent = "Recenzuję...";
+          button.textContent = "Reviewing...";
           button.disabled = true;
 
           const result = await reviewMergeRequest(iid);
@@ -641,32 +641,32 @@
             result.merge_request,
           );
 
-          button.textContent = "Przejrzane";
+          button.textContent = "Reviewed";
           button.disabled = true;
 
           const actionsDiv = button.parentElement;
           const clearButton = document.createElement("button");
           clearButton.className = "btn btn-secondary";
-          clearButton.textContent = "Wyczyść";
+          clearButton.textContent = "Clear";
           clearButton.onclick = () => clearReview(iid);
           actionsDiv.appendChild(clearButton);
 
           const statusDiv = document.createElement("div");
           statusDiv.className = "review-status status-reviewed";
-          statusDiv.textContent = `✓ Przejrzane (${formatDate(new Date().toISOString())})`;
+          statusDiv.textContent = `✓ Reviewed (${formatDate(new Date().toISOString())})`;
           button.parentElement.parentElement.insertBefore(
             statusDiv,
             button.parentElement,
           );
 
           showMessage(
-            `Recenzja MR #${iid} zakończona! Analiza przeprowadzona lokalnie.`,
+            `MR #${iid} review completed! Analysis performed locally.`,
             "success",
           );
 
           updateStats();
         } catch (error) {
-          showMessage(`Błąd recenzji MR #${iid}: ${error.message}`, "error");
+          showMessage(`Error reviewing MR #${iid}: ${error.message}`, "error");
           button.textContent = originalText;
           button.disabled = false;
         }
@@ -675,7 +675,7 @@
       function clearReview(iid) {
         clearReviewResult(iid);
         loadMergeRequests();
-        showMessage(`Wyczyszczono recenzję MR #${iid}`, "success");
+        showMessage(`Cleared review for MR #${iid}`, "success");
       }
 
       async function updateStats() {
@@ -700,7 +700,7 @@
           );
           document.getElementById("totalIssues").textContent = totalIssues;
         } catch (error) {
-          console.error("Błąd aktualizacji statystyk:", error);
+          console.error("Error updating stats:", error);
         }
       }
 
@@ -711,7 +711,7 @@
 
           if (mrs.count === 0) {
             container.innerHTML =
-              '<div class="loading">Brak otwartych Merge Requests</div>';
+              '<div class="loading">No open Merge Requests</div>';
             return;
           }
 
@@ -719,7 +719,7 @@
           updateStats();
         } catch (error) {
           document.getElementById("mergeRequests").innerHTML =
-            `<div class="error">Błąd ładowania Merge Requests: ${error.message}</div>`;
+            `<div class="error">Error loading Merge Requests: ${error.message}</div>`;
         }
       }
 
