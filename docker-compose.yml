@@ -26,20 +26,6 @@ services:
     networks:
       - codereview-network
 
-  # Opcjonalny serwis Redis dla cache'owania (przyszłość)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: codereview-redis
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis-data:/data
-  #   networks:
-  #     - codereview-network
-
 networks:
   codereview-network:
     driver: bridge
-
-# volumes:
-#   redis-data: 

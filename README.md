@@ -1,4 +1,4 @@
-# Code Review AI
+# Simple Code Review AI
 
 Aplikacja AI do automatycznego code review Merge Requests w GitLab. Aplikacja analizuje zmiany w kodzie za pomocą OpenAI GPT-4 i wyświetla wyniki recenzji w interfejsie webowym.
 
