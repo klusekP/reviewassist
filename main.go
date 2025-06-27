@@ -12,17 +12,14 @@ import (
 )
 
 func main() {
-	// Ładowanie zmiennych środowiskowych
 	if err := godotenv.Load(); err != nil {
 		logrus.Warn("Nie znaleziono pliku .env")
 	}
 
-	// Konfiguracja loggera
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
 
-	// Sprawdzanie wymaganych zmiennych środowiskowych
 	requiredEnvVars := []string{"GITLAB_TOKEN", "OPENAI_API_KEY", "GITLAB_PROJECT_ID"}
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
@@ -30,10 +27,8 @@ func main() {
 		}
 	}
 
-	// Inicjalizacja routera
 	router := gin.Default()
 
-	// Dodanie middleware CORS
 	router.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -47,21 +42,17 @@ func main() {
 		c.Next()
 	})
 
-	// Obsługa statycznych plików
 	router.Static("/static", "./static")
 	router.LoadHTMLGlob("static/*.html")
 
-	// Strona główna
 	router.GET("/", func(c *gin.Context) {
 		c.HTML(200, "index.html", nil)
 	})
 
-	// Inicjalizacja serwisów
 	gitlabService := services.NewGitLabService()
 	aiService := services.NewAIService()
 	reviewService := services.NewReviewService(gitlabService, aiService)
 
-	// Endpointy API
 	api := router.Group("/api/v1")
 	{
 		api.GET("/health", func(c *gin.Context) {
@@ -74,7 +65,6 @@ func main() {
 		api.GET("/projects", reviewService.GetProjects)
 	}
 
-	// Uruchomienie serwera
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
