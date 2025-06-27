@@ -8,7 +8,6 @@ require (
 	github.com/sashabaranov/go-openai v1.17.9
 	github.com/sirupsen/logrus v1.9.3
 	github.com/xanzy/go-gitlab v0.93.1
-	github.com/anthropics/anthropic-go v1.0.0
 )
 
 require (

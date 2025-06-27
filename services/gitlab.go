@@ -160,7 +160,6 @@ func (g *GitLabService) AddComment(iid int, body string, line int, path string) 
 		Body: &body,
 	}
 
-	// Uproszczone dodawanie komentarza - bez pozycjonowania
 	_, _, err := g.client.Notes.CreateMergeRequestNote(g.projectID, iid, opts)
 	if err != nil {
 		return fmt.Errorf("błąd dodawania komentarza: %v", err)

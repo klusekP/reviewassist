@@ -11,12 +11,13 @@ import (
 	"strings"
 
 	"github.com/sashabaranov/go-openai"
+	"github.com/sirupsen/logrus"
 )
 
 type AIService struct {
 	openaiClient *openai.Client
 	claudeAPIKey string
-	model        string // "openai" lub "claude"
+	model        string
 }
 
 type CodeReview struct {
@@ -129,7 +130,6 @@ Opis MR: ` + mrDescription + `
 Zmiany w kodzie:
 ` + contextStr
 
-	// Wybierz model i przeprowadź recenzję
 	switch a.model {
 	case "claude":
 		return a.reviewWithClaude(prompt)
@@ -240,7 +240,6 @@ func (a *AIService) reviewWithClaude(prompt string) (*CodeReview, error) {
 func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) string {
 	var context strings.Builder
 
-	// Ogranicz liczbę diffów do pierwszych 5
 	maxDiffs := 5
 	if len(diffs) > maxDiffs {
 		context.WriteString(fmt.Sprintf("Pokazano pierwsze %d z %d plików:\n\n", maxDiffs, len(diffs)))
@@ -257,7 +256,6 @@ func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) st
 			context.WriteString(fmt.Sprintf("(PRZENIESIONY Z: %s)\n", diff.OldPath))
 		}
 
-		// Skróć diff jeśli jest za długi
 		diffContent := diff.Diff
 		if len(diffContent) > 1000 {
 			diffContent = diffContent[:1000] + "\n\n[Diff został skrócony...]"
@@ -272,74 +270,27 @@ func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) st
 }
 
 func (a *AIService) parseReviewResponse(content string) (*CodeReview, error) {
-	// Usuń markdown formatting jeśli istnieje
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
 
-	// Parsowanie JSON (uproszczone - w rzeczywistej aplikacji użyj json.Unmarshal)
-	// Tutaj zwracamy podstawową strukturę z fragmentami kodu
-	return &CodeReview{
-		Summary: "Automatyczna recenzja kodu - analiza jakości i bezpieczeństwa",
-		Issues: []Issue{
-			{
-				Type:        "best_practice",
-				Severity:    "low",
-				Description: "Zalecana jest dodanie komentarzy do złożonej logiki",
-				File:        "main.go",
-				Line:        1,
-				Code: `func main() {
-    // Brak komentarzy wyjaśniających logikę
-    router := gin.Default()
-    // ...`,
-				Fix: `func main() {
-    // Inicjalizacja routera Gin
-    router := gin.Default()
-    // Dodanie middleware CORS
-    router.Use(corsMiddleware())
-    // ...`,
-			},
-			{
-				Type:        "security",
-				Severity:    "medium",
-				Description: "Sprawdź walidację danych wejściowych",
-				File:        "services/review.go",
-				Line:        25,
-				Code: `iid, err := strconv.Atoi(iidStr)
-if err != nil {
-    // Brak dodatkowej walidacji`,
-				Fix: `iid, err := strconv.Atoi(iidStr)
-if err != nil || iid <= 0 {
-    c.JSON(http.StatusBadRequest, gin.H{
-        "error": "Nieprawidłowy ID merge request",
-    })
-    return
-}`,
-			},
-			{
-				Type:        "performance",
-				Severity:    "low",
-				Description: "Rozważ dodanie cache'owania dla często używanych danych",
-				File:        "services/gitlab.go",
-				Line:        45,
-				Code:        `mrs, _, err := g.client.MergeRequests.ListProjectMergeRequests(g.projectID, opts)`,
-				Fix: `// Dodaj cache dla merge requests
-if cached, exists := cache.Get(cacheKey); exists {
-    return cached.([]MergeRequest), nil
-}
-mrs, _, err := g.client.MergeRequests.ListProjectMergeRequests(g.projectID, opts)
-cache.Set(cacheKey, mrs, time.Minute*5)`,
-			},
-		},
-		Suggestions: []string{
-			"Rozważ dodanie testów jednostkowych dla wszystkich serwisów",
-			"Dodaj obsługę błędów z bardziej szczegółowymi komunikatami",
-			"Zaimplementuj rate limiting dla API calls",
-			"Dodaj logowanie strukturalne z poziomami logów",
-			"Rozważ dodanie metryk i monitoringu",
-		},
-		Score: 7,
-	}, nil
+	var review CodeReview
+	if err := json.Unmarshal([]byte(content), &review); err != nil {
+		logrus.Warnf("Nie udało się sparsować odpowiedzi AI: %v. Treść: %s", err, content)
+		return a.createFallbackReview([]Diff{}), nil
+	}
+
+	if review.Summary == "" {
+		review.Summary = "Automatyczna recenzja kodu"
+	}
+	if review.Score == 0 {
+		review.Score = 5
+	}
+	if review.Score > 10 {
+		review.Score = 10
+	}
+
+	return &review, nil
 }
 
 func (a *AIService) createFallbackReview(diffs []Diff) *CodeReview {
