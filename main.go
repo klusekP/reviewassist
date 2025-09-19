@@ -43,10 +43,9 @@ func main() {
 	})
 
 	router.Static("/static", "./static")
-	router.LoadHTMLGlob("static/*.html")
 
 	router.GET("/", func(c *gin.Context) {
-		c.HTML(200, "index.html", nil)
+		c.File("static/index.html")
 	})
 
 	gitlabService := services.NewGitLabService()
@@ -63,6 +62,7 @@ func main() {
 		api.GET("/merge-requests/:id", reviewService.GetMergeRequest)
 		api.POST("/merge-requests/:id/review", reviewService.ReviewMergeRequest)
 		api.GET("/projects", reviewService.GetProjects)
+		api.GET("/stats", reviewService.GetStats)
 	}
 
 	port := os.Getenv("PORT")

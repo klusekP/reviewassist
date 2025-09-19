@@ -32,6 +32,8 @@ func (r *ReviewService) GetMergeRequests(c *gin.Context) {
 		return
 	}
 
+	logrus.Infof("Pobrano %d merge requests", len(mrs))
+
 	c.JSON(http.StatusOK, gin.H{
 		"merge_requests": mrs,
 		"count":          len(mrs),
@@ -127,5 +129,28 @@ func (r *ReviewService) GetProjects(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"projects": projects,
 		"count":    len(projects),
+	})
+}
+
+func (r *ReviewService) GetStats(c *gin.Context) {
+	mrs, err := r.gitlabService.GetMergeRequests("opened")
+	if err != nil {
+		logrus.Errorf("Błąd pobierania statystyk: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"totalMRs":    "-",
+			"reviewedMRs": "-",
+			"avgScore":    "-",
+			"totalIssues": "-",
+		})
+		return
+	}
+
+	// TODO: Implementuj logikę statystyk na podstawie zapisanych recenzji
+	// Na razie zwracamy podstawowe dane
+	c.JSON(http.StatusOK, gin.H{
+		"totalMRs":    len(mrs),
+		"reviewedMRs": 0,   // TODO: policz z localStorage lub bazy danych
+		"avgScore":    "-", // TODO: policz średnią ocenę
+		"totalIssues": 0,   // TODO: policz łączne problemy
 	})
 }

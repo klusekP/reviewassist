@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Code Review AI</title>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <style>
       * {
         margin: 0;
@@ -67,6 +71,7 @@
         font-size: 2em;
         font-weight: bold;
         color: #667eea;
+        transition: all 0.3s ease;
       }
 
       .stat-label {
@@ -195,6 +200,307 @@
         text-align: center;
         padding: 40px;
         color: #666;
+      }
+
+      .loading-spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      /* Snackbar styles */
+      .snackbar {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #333;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        transform: translateX(100%);
+        transition: transform 0.3s ease-in-out;
+        max-width: 400px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .snackbar.show {
+        transform: translateX(0);
+      }
+
+      .snackbar.success {
+        background: #4caf50;
+      }
+
+      .snackbar.error {
+        background: #f44336;
+      }
+
+      .snackbar.warning {
+        background: #ff9800;
+      }
+
+      .snackbar.info {
+        background: #2196f3;
+      }
+
+      .snackbar-icon {
+        font-size: 20px;
+        flex-shrink: 0;
+      }
+
+      .snackbar-content {
+        flex: 1;
+      }
+
+      .snackbar-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .snackbar-message {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+      .snackbar-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        padding: 0;
+        margin-left: 8px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+      }
+
+      .snackbar-close:hover {
+        opacity: 1;
+      }
+
+      /* Collapsible sections */
+      .collapsible-section {
+        margin-top: 15px;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .collapsible-header {
+        background: #f8f9fa;
+        padding: 12px 16px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e9ecef;
+        transition: background-color 0.2s;
+      }
+
+      .collapsible-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .collapsible-header:hover {
+        background: #e9ecef;
+      }
+
+      .collapsible-header h4 {
+        margin: 0;
+        font-size: 1em;
+        color: #333;
+        font-weight: 600;
+      }
+
+      .collapsible-icon {
+        font-size: 14px;
+        color: #666;
+        transition: transform 0.2s;
+        user-select: none;
+      }
+
+      .collapsible-content {
+        padding: 16px;
+        background: white;
+        animation: slideDown 0.3s ease-out;
+      }
+
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          max-height: 0;
+        }
+        to {
+          opacity: 1;
+          max-height: 1000px;
+        }
+      }
+
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slideOutRight {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+
+      /* GitHub-style diff styles */
+      .diff-container {
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        margin: 10px 0;
+        overflow: hidden;
+      }
+
+      .diff-header {
+        background: #f6f8fa;
+        border-bottom: 1px solid #d0d7de;
+        padding: 8px 16px;
+        font-size: 12px;
+        color: #656d76;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .diff-file-name {
+        font-weight: 600;
+        color: #24292f;
+      }
+
+      .diff-stats {
+        font-size: 11px;
+      }
+
+      .diff-content {
+        background: #ffffff;
+      }
+
+      .diff-hunk-header {
+        background: #f1f8ff;
+        border-bottom: 1px solid #d0d7de;
+        padding: 4px 16px;
+        font-size: 11px;
+        color: #656d76;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      .diff-line {
+        display: flex;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .diff-line-number {
+        width: 50px;
+        padding: 0 8px;
+        text-align: right;
+        color: #656d76;
+        background: #f6f8fa;
+        border-right: 1px solid #d0d7de;
+        user-select: none;
+        flex-shrink: 0;
+      }
+
+      .diff-line-number.added {
+        background: #e6f7e6;
+      }
+
+      .diff-line-number.removed {
+        background: #ffe6e6;
+      }
+
+      .diff-line-content {
+        flex: 1;
+        padding: 0 8px;
+        white-space: pre-wrap;
+        word-break: break-all;
+        overflow-x: auto;
+      }
+
+      .diff-line.added {
+        background: #f0f9f0;
+      }
+
+      .diff-line.removed {
+        background: #fdf2f2;
+      }
+
+      .diff-line.added .diff-line-content {
+        color: #2d5a2d;
+      }
+
+      .diff-line.removed .diff-line-content {
+        color: #8b2635;
+      }
+
+      .diff-line.added .diff-line-number {
+        background: #e6f7e6;
+        color: #2d5a2d;
+      }
+
+      .diff-line.removed .diff-line-number {
+        background: #ffe6e6;
+        color: #8b2635;
+      }
+
+      .diff-line.context .diff-line-number {
+        background: #f6f8fa;
+        color: #656d76;
+      }
+
+      .diff-line.context .diff-line-content {
+        color: #24292f;
+      }
+
+      .diff-line .diff-line-number::before {
+        content: attr(data-line);
+      }
+
+      .diff-line .diff-line-number.added::before {
+        content: "+";
+      }
+
+      .diff-line .diff-line-number.removed::before {
+        content: "-";
+      }
+
+      .diff-line .diff-line-number.context::before {
+        content: " ";
       }
 
       .error {
@@ -401,7 +707,7 @@
       }
     </style>
   </head>
-  <body>
+  <body x-data="app()" x-init="init()">
     <div class="container">
       <div class="header">
         <h1>🤖 Code Review AI</h1>
@@ -409,179 +715,316 @@
       </div>
 
       <div class="content">
-        <div id="message"></div>
 
         <div class="stats">
           <div class="stat-card">
-            <div class="stat-number" id="totalMRs">-</div>
+            <div class="stat-number" x-text="stats.totalMRs">-</div>
             <div class="stat-label">Merge Requests</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number" id="reviewedMRs">-</div>
+            <div class="stat-number" x-text="stats.reviewedMRs">-</div>
             <div class="stat-label">Reviewed</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number" id="avgScore">-</div>
+            <div class="stat-number" x-text="stats.avgScore">-</div>
             <div class="stat-label">Average Score</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number" id="totalIssues">-</div>
+            <div class="stat-number" x-text="stats.totalIssues">-</div>
             <div class="stat-label">Issues Found</div>
           </div>
         </div>
 
         <div class="section">
           <h2>Merge Requests</h2>
-          <div id="mergeRequests" class="merge-requests">
-            <div class="loading">Loading...</div>
+          <div class="merge-requests">
+            <div x-show="loading" class="loading">Loading...</div>
+            <div x-show="!loading && mergeRequests.length === 0" class="loading">No open Merge Requests</div>
+            <template x-for="mr in mergeRequests" :key="mr.iid">
+              <div class="mr-card">
+                <div class="mr-header">
+                  <div class="mr-title" x-text="mr.title"></div>
+                  <div class="mr-id" x-text="'#' + mr.iid"></div>
+          </div>
+                <div class="mr-author" x-text="'Author: ' + mr.author.name"></div>
+                <div class="mr-branches">
+                  <div class="branch" x-text="mr.source_branch + ' → ' + mr.target_branch"></div>
+        </div>
+                <div x-show="mr.reviewed" class="review-status status-reviewed" x-text="'✓ Reviewed (' + formatDate(mr.reviewedAt) + ')'"></div>
+                <div class="mr-actions">
+                  <button class="btn btn-success" @click="reviewMR(mr)" :disabled="mr.reviewed || mr.reviewing">
+                    <span x-show="!mr.reviewing" x-text="mr.reviewed ? 'Reviewed' : 'AI Review'"></span>
+                    <span x-show="mr.reviewing" class="loading-spinner"></span>
+                  </button>
+                  <button x-show="mr.reviewed" class="btn btn-secondary" @click="clearReview(mr.iid)">Clear</button>
+                  <a :href="mr.web_url" target="_blank" class="btn btn-secondary">GitLab</a>
+                </div>
+                
+                <!-- Review Section -->
+                <div x-show="mr.reviewed" class="collapsible-section">
+                  <div class="collapsible-header" @click="mr.showReview = !mr.showReview">
+                    <h4>AI Review Results</h4>
+                    <span class="collapsible-icon" x-text="mr.showReview ? '▼' : '▶'"></span>
+                  </div>
+                  <div x-show="mr.showReview" class="collapsible-content" x-html="mr.reviewResult"></div>
+                </div>
+                
+                <!-- Details Section -->
+                <div class="collapsible-section">
+                  <div class="collapsible-header" @click="viewMR(mr.iid)">
+                    <h4>Merge Request Details</h4>
+                    <div class="collapsible-header-right">
+                      <span x-show="mr.loadingDetails" class="loading-spinner" style="margin-right: 8px;"></span>
+                      <span class="collapsible-icon" x-text="mr.showDetails ? '▼' : '▶'"></span>
+                    </div>
+                  </div>
+                  <div x-show="mr.showDetails && mr.detailsResult" class="collapsible-content" x-html="mr.detailsResult"></div>
+                  <div x-show="mr.showDetails && mr.loadingDetails" class="collapsible-content">
+                    <div class="loading">Loading details...</div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Snackbar -->
+    <div x-show="snackbar.show" 
+         class="snackbar" 
+         :class="snackbar.type">
+      <div class="snackbar-icon" x-text="snackbar.icon"></div>
+      <div class="snackbar-content">
+        <div class="snackbar-title" x-text="snackbar.title"></div>
+        <div class="snackbar-message" x-text="snackbar.message"></div>
+      </div>
+      <button class="snackbar-close" @click="hideSnackbar()">&times;</button>
+    </div>
+
     <script>
-      const API_BASE = "http://localhost:8080/api/v1";
+      function app() {
+        return {
+          // State
+          loading: true,
+          mergeRequests: [],
+          stats: {
+            totalMRs: '-',
+            reviewedMRs: '-',
+            avgScore: '-',
+            totalIssues: '-'
+          },
+          snackbar: {
+            show: false,
+            type: 'success',
+            icon: '✓',
+            title: '',
+            message: ''
+          },
 
-      const REVIEW_STORAGE_KEY = "codereview_results";
+          // Initialize
+          async init() {
+            // Test snackbar
+            this.showSnackbar('Aplikacja uruchomiona', 'Code Review AI jest gotowy do pracy', 'success', 3000);
+            
+            await this.loadMergeRequests();
+            await this.updateStats();
+            this.startAutoRefresh();
+          },
 
-      function showMessage(message, type = "success") {
-        const messageDiv = document.getElementById("message");
-        messageDiv.innerHTML = `<div class="${type}">${message}</div>`;
-        setTimeout(() => {
-          messageDiv.innerHTML = "";
-        }, 5000);
-      }
+          // API calls
+          async loadMergeRequests() {
+            try {
+              this.loading = true;
+              this.showSnackbar('Ładowanie', 'Pobieranie Merge Requests...', 'info', 2000);
+              const response = await fetch('/api/v1/merge-requests?state=opened');
+              if (!response.ok) throw new Error('Error fetching MRs');
+              const data = await response.json();
+              
+              this.mergeRequests = data.merge_requests.map(mr => ({
+                ...mr,
+                reviewed: false,
+                reviewing: false,
+                reviewedAt: null,
+                reviewResult: '',
+                showDetails: false,
+                detailsResult: '',
+                showReview: false,
+                loadingDetails: false
+              }));
+              
+              this.loadReviewResults();
+              this.showSnackbar('Załadowano', `Pobrano ${data.merge_requests.length} Merge Requests`, 'success', 3000);
+            } catch (error) {
+              this.showSnackbar('Błąd ładowania', 'Nie udało się załadować Merge Requests: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
 
-      function formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      }
+          async updateStats() {
+            try {
+              // Pobierz podstawowe statystyki z serwera
+              const response = await fetch('/api/v1/stats');
+              if (!response.ok) throw new Error('Error fetching stats');
+              const data = await response.json();
+              
+              // Pobierz recenzje z localStorage
+              const reviewResults = this.getReviewResults();
+              const reviewedCount = Object.keys(reviewResults).length;
+              
+              // Oblicz średnią ocenę
+              const scores = Object.values(reviewResults).map(r => r.score);
+              const avgScore = scores.length > 0 
+                ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
+                : '-';
+              
+              // Oblicz łączne problemy
+              const totalIssues = Object.values(reviewResults).reduce(
+                (sum, r) => sum + (r.issues ? r.issues.length : 0), 0
+              );
+              
+              // Aktualizuj statystyki bez re-renderowania
+              this.stats.totalMRs = data.totalMRs;
+              this.stats.reviewedMRs = reviewedCount;
+              this.stats.avgScore = avgScore;
+              this.stats.totalIssues = totalIssues;
+            } catch (error) {
+              console.error('Error updating stats:', error);
+            }
+          },
 
-      function getSeverityColor(severity) {
-        switch (severity.toLowerCase()) {
-          case "critical":
-            return "#dc3545";
-          case "high":
-            return "#fd7e14";
-          case "medium":
-            return "#ffc107";
-          case "low":
-            return "#28a745";
-          default:
-            return "#6c757d";
-        }
-      }
+          async viewMR(iid) {
+            try {
+              const mr = this.mergeRequests.find(m => m.iid === iid);
+              if (!mr) return;
 
-      function saveReviewResult(iid, review) {
-        const results = getReviewResults();
-        results[iid] = {
-          ...review,
-          timestamp: new Date().toISOString(),
-        };
-        localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(results));
-      }
+              mr.showDetails = !mr.showDetails;
+              if (mr.showDetails && !mr.detailsResult) {
+                mr.loadingDetails = true;
+                try {
+                  const response = await fetch(`/api/v1/merge-requests/${iid}`);
+                  const data = await response.json();
+                  mr.detailsResult = this.createMRDetailsHTML(data);
+                } finally {
+                  mr.loadingDetails = false;
+                }
+              }
+            } catch (error) {
+              mr.loadingDetails = false;
+              this.showSnackbar('Błąd szczegółów', 'Nie udało się pobrać szczegółów MR: ' + error.message, 'error');
+            }
+          },
 
-      function getReviewResults() {
-        const stored = localStorage.getItem(REVIEW_STORAGE_KEY);
-        return stored ? JSON.parse(stored) : {};
-      }
-
-      function getReviewResult(iid) {
-        const results = getReviewResults();
-        return results[iid] || null;
-      }
-
-      function clearReviewResult(iid) {
-        const results = getReviewResults();
-        delete results[iid];
-        localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(results));
-      }
-
-      async function fetchMergeRequests() {
-        try {
-          const response = await fetch(
-            `${API_BASE}/merge-requests?state=opened`,
-          );
-          if (!response.ok) throw new Error("Error fetching MRs");
-          return await response.json();
+          async reviewMR(mr) {
+            try {
+              mr.reviewing = true;
+              const response = await fetch(`/api/v1/merge-requests/${mr.iid}/review`, {
+                method: 'POST'
+              });
+              
+              if (!response.ok) throw new Error('Review error');
+              const data = await response.json();
+              
+              mr.reviewed = true;
+              mr.reviewedAt = new Date().toISOString();
+              mr.reviewResult = this.createReviewResultHTML(data.review);
+              mr.showReview = true; // Show review results after completion
+              this.saveReviewResult(mr.iid, data.review);
+              
+              // Force update stats immediately
+              this.scheduleStatsUpdate();
+              this.showSnackbar('Recenzja zakończona', `MR #${mr.iid} został przeanalizowany przez AI`, 'success');
+              
+              // Highlight syntax
+              if (typeof Prism !== 'undefined') {
+                setTimeout(() => Prism.highlightAll(), 100);
+              }
         } catch (error) {
-          console.error("Error:", error);
-          throw error;
-        }
-      }
+              this.showSnackbar('Błąd recenzji', 'Nie udało się przeprowadzić recenzji MR: ' + error.message, 'error');
+            } finally {
+              mr.reviewing = false;
+            }
+          },
 
-      async function reviewMergeRequest(iid) {
-        try {
-          const response = await fetch(
-            `${API_BASE}/merge-requests/${iid}/review`,
-            {
-              method: "POST",
-            },
-          );
-          if (!response.ok) throw new Error("Review error");
-          return await response.json();
-        } catch (error) {
-          console.error("Error:", error);
-          throw error;
-        }
-      }
+          async clearReview(iid) {
+            const mr = this.mergeRequests.find(m => m.iid === iid);
+            if (mr) {
+              mr.reviewed = false;
+              mr.reviewedAt = null;
+              mr.reviewResult = '';
+            }
+            this.clearReviewResult(iid);
+            this.scheduleStatsUpdate();
+            this.showSnackbar('Recenzja usunięta', `Recenzja dla MR #${iid} została usunięta`, 'info');
+          },
 
-      function createMRCard(mr) {
-        const reviewResult = getReviewResult(mr.iid);
-        const hasReview = reviewResult !== null;
+          // Snackbar functions
+          showSnackbar(title, message, type = 'success', duration = 5000) {
+            const icons = {
+              success: '✓',
+              error: '✗',
+              warning: '⚠',
+              info: 'ℹ'
+            };
+            
+            console.log('Showing snackbar:', { title, message, type });
+            
+            this.snackbar = {
+              show: true,
+              type: type,
+              icon: icons[type] || '✓',
+              title: title,
+              message: message
+            };
+            
+            if (duration > 0) {
+              setTimeout(() => {
+                this.hideSnackbar();
+              }, duration);
+            }
+          },
 
-        return `
-                <div class="mr-card" data-iid="${mr.iid}">
-                    <div class="mr-header">
-                        <div class="mr-title">${mr.title}</div>
-                        <div class="mr-id">#${mr.iid}</div>
-                    </div>
-                    <div class="mr-author">Author: ${mr.author.name}</div>
-                    <div class="mr-branches">
-                        <div class="branch">${mr.source_branch} → ${mr.target_branch}</div>
-                    </div>
-                    ${hasReview ? `<div class="review-status status-reviewed">✓ Reviewed (${formatDate(reviewResult.timestamp)})</div>` : ""}
-                    <div class="mr-actions">
-                        <button class="btn btn-primary" onclick="viewMR(${mr.iid})">Details</button>
-                        <button class="btn btn-success" onclick="reviewMR(${mr.iid})" ${hasReview ? "disabled" : ""}>
-                            ${hasReview ? "Reviewed" : "AI Review"}
-                        </button>
-                        ${hasReview ? `<button class="btn btn-secondary" onclick="clearReview(${mr.iid})">Clear</button>` : ""}
-                        <a href="${mr.web_url}" target="_blank" class="btn btn-secondary">GitLab</a>
-                    </div>
-                    <div id="review-result-${mr.iid}">
-                        ${hasReview ? createReviewResultHTML(reviewResult, mr) : ""}
-                    </div>
-                </div>
-            `;
-      }
+          hideSnackbar() {
+            this.snackbar.show = false;
+          },
 
-      function createReviewResultHTML(review, mr) {
-        const issuesHtml = review.issues
-          .map(
-            (issue) => `
+          // Helper functions
+          showMessage(message, type = 'success') {
+            const titles = {
+              success: 'Sukces',
+              error: 'Błąd',
+              warning: 'Ostrzeżenie',
+              info: 'Informacja'
+            };
+            this.showSnackbar(titles[type] || 'Informacja', message, type);
+          },
+
+          formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          },
+
+          createReviewResultHTML(review) {
+            const issuesHtml = review.issues.map(issue => `
                 <div class="issue ${issue.severity.toLowerCase()}">
                     <div>
                         <span class="issue-type">${issue.type}</span>
                         <span class="issue-severity">(${issue.severity})</span>
                     </div>
                     <div class="issue-description">${issue.description}</div>
-                    ${issue.file ? `<div class="issue-file">File: ${issue.file}:${issue.line}</div>` : ""}
-                    ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ""}
-                    ${issue.fix ? `<div class="issue-fix"><strong>Suggested fix:</strong><pre><code>${issue.fix}</code></pre></div>` : ""}
+                ${issue.file ? `<div class="issue-file">File: ${issue.file}:${issue.line}</div>` : ''}
+                ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ''}
+                ${issue.fix ? `<div class="issue-fix"><strong>Suggested fix:</strong><pre><code>${issue.fix}</code></pre></div>` : ''}
                 </div>
-            `,
-          )
-          .join("");
+            `).join('');
 
-        const suggestionsHtml = review.suggestions
-          .map((suggestion) => `<li>${suggestion}</li>`)
-          .join("");
+            const suggestionsHtml = review.suggestions.map(s => `<li>${s}</li>`).join('');
 
         return `
                 <div class="review-result">
@@ -590,15 +1033,8 @@
                     <div class="review-files">
                         <h4>Analyzed files:</h4>
                         <ul>
-                            ${Array.from(
-                              new Set(
-                                review.issues
-                                  .map((issue) => issue.file)
-                                  .filter((f) => f),
-                              ),
-                            )
-                              .map((file) => `<li><code>${file}</code></li>`)
-                              .join("")}
+                    ${Array.from(new Set(review.issues.map(issue => issue.file).filter(f => f)))
+                      .map(file => `<li><code>${file}</code></li>`).join('')}
                         </ul>
                     </div>
                     <div class="review-issues">
@@ -611,124 +1047,121 @@
                     </div>
                 </div>
             `;
-      }
+          },
 
-      async function viewMR(iid) {
-        try {
-          const response = await fetch(`${API_BASE}/merge-requests/${iid}`);
-          const data = await response.json();
-          showMessage(`Retrieved MR #${iid} details`, "success");
-        } catch (error) {
-          showMessage(`Error fetching MR #${iid}: ${error.message}`, "error");
-        }
-      }
+          createMRDetailsHTML(data) {
+            return `
+              <div class="mr-details">
+                <h3>Merge Request Details</h3>
+                <div style="margin-bottom: 20px;">
+                  <p><strong>Title:</strong> ${data.merge_request.title}</p>
+                  <p><strong>Description:</strong> ${data.merge_request.description}</p>
+                  <p><strong>Author:</strong> ${data.merge_request.author.name}</p>
+                  <p><strong>Source Branch:</strong> ${data.merge_request.source_branch}</p>
+                  <p><strong>Target Branch:</strong> ${data.merge_request.target_branch}</p>
+                  <p><strong>Created:</strong> ${data.merge_request.created_at}</p>
+                  <p><strong>Updated:</strong> ${data.merge_request.updated_at}</p>
+                </div>
+                ${data.diffs && data.diffs.length > 0 ? `
+                  <h4>Changes (${data.diff_count} files):</h4>
+                  ${data.diffs.map(diff => `
+                    <div class="diff-container">
+                      <div class="diff-header">
+                        <span class="diff-file-name">${diff.new_path}</span>
+                        <span class="diff-stats">
+                          ${diff.new_file ? 'New file' : diff.deleted_file ? 'Deleted file' : diff.renamed_file ? 'Renamed file' : 'Modified file'}
+                        </span>
+                      </div>
+                      <div class="diff-content">
+                        ${this.formatDiff(diff.diff)}
+                      </div>
+                    </div>
+                  `).join('')}
+                ` : '<p>No changes to display</p>'}
+              </div>
+            `;
+          },
 
-      async function reviewMR(iid) {
-        const button = event.target;
-        const originalText = button.textContent;
+          formatDiff(diffText) {
+            return diffText.split('\n').map(line => {
+              if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+                return `<div class="diff-hunk-header">${line}</div>`;
+              } else if (line.startsWith('+')) {
+                return `
+                  <div class="diff-line added">
+                    <span class="diff-line-number added"></span>
+                    <span class="diff-line-content"><code>${line.substring(1)}</code></span>
+                  </div>
+                `;
+              } else if (line.startsWith('-')) {
+                return `
+                  <div class="diff-line removed">
+                    <span class="diff-line-number removed"></span>
+                    <span class="diff-line-content"><code>${line.substring(1)}</code></span>
+                  </div>
+                `;
+              } else {
+                return `
+                  <div class="diff-line context">
+                    <span class="diff-line-number context"></span>
+                    <span class="diff-line-content"><code>${line}</code></span>
+                  </div>
+                `;
+              }
+            }).join('');
+          },
 
-        try {
-          button.textContent = "Reviewing...";
-          button.disabled = true;
+          // Local storage
+          saveReviewResult(iid, review) {
+            const results = this.getReviewResults();
+            results[iid] = { ...review, timestamp: new Date().toISOString() };
+            localStorage.setItem('codereview_results', JSON.stringify(results));
+          },
 
-          const result = await reviewMergeRequest(iid);
+          getReviewResults() {
+            const stored = localStorage.getItem('codereview_results');
+            return stored ? JSON.parse(stored) : {};
+          },
 
-          saveReviewResult(iid, result.review);
+          loadReviewResults() {
+            const results = this.getReviewResults();
+            this.mergeRequests.forEach(mr => {
+              if (results[mr.iid]) {
+                mr.reviewed = true;
+                mr.reviewedAt = results[mr.iid].timestamp;
+                mr.reviewResult = this.createReviewResultHTML(results[mr.iid]);
+                mr.showReview = false; // Start collapsed
+              }
+            });
+            this.scheduleStatsUpdate();
+          },
 
-          const resultDiv = document.getElementById(`review-result-${iid}`);
-          resultDiv.innerHTML = createReviewResultHTML(
-            result.review,
-            result.merge_request,
-          );
+          clearReviewResult(iid) {
+            const results = this.getReviewResults();
+            delete results[iid];
+            localStorage.setItem('codereview_results', JSON.stringify(results));
+          },
 
-          button.textContent = "Reviewed";
-          button.disabled = true;
+          // Auto refresh
+          startAutoRefresh() {
+            setInterval(() => {
+              this.loadMergeRequests();
+              this.scheduleStatsUpdate();
+            }, 30000);
+          },
 
-          const actionsDiv = button.parentElement;
-          const clearButton = document.createElement("button");
-          clearButton.className = "btn btn-secondary";
-          clearButton.textContent = "Clear";
-          clearButton.onclick = () => clearReview(iid);
-          actionsDiv.appendChild(clearButton);
-
-          const statusDiv = document.createElement("div");
-          statusDiv.className = "review-status status-reviewed";
-          statusDiv.textContent = `✓ Reviewed (${formatDate(new Date().toISOString())})`;
-          button.parentElement.parentElement.insertBefore(
-            statusDiv,
-            button.parentElement,
-          );
-
-          showMessage(
-            `MR #${iid} review completed! Analysis performed locally.`,
-            "success",
-          );
-
-          updateStats();
-        } catch (error) {
-          showMessage(`Error reviewing MR #${iid}: ${error.message}`, "error");
-          button.textContent = originalText;
-          button.disabled = false;
-        }
-      }
-
-      function clearReview(iid) {
-        clearReviewResult(iid);
-        loadMergeRequests();
-        showMessage(`Cleared review for MR #${iid}`, "success");
-      }
-
-      async function updateStats() {
-        try {
-          const mrs = await fetchMergeRequests();
-          const reviewResults = getReviewResults();
-
-          document.getElementById("totalMRs").textContent = mrs.count;
-          document.getElementById("reviewedMRs").textContent =
-            Object.keys(reviewResults).length;
-
-          const scores = Object.values(reviewResults).map((r) => r.score);
-          const avgScore =
-            scores.length > 0
-              ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
-              : "-";
-          document.getElementById("avgScore").textContent = avgScore;
-
-          const totalIssues = Object.values(reviewResults).reduce(
-            (sum, r) => sum + r.issues.length,
-            0,
-          );
-          document.getElementById("totalIssues").textContent = totalIssues;
-        } catch (error) {
-          console.error("Error updating stats:", error);
-        }
-      }
-
-      async function loadMergeRequests() {
-        try {
-          const mrs = await fetchMergeRequests();
-          const container = document.getElementById("mergeRequests");
-
-          if (mrs.count === 0) {
-            container.innerHTML =
-              '<div class="loading">No open Merge Requests</div>';
-            return;
+          // Debounced update stats
+          debouncedUpdateStats: null,
+          scheduleStatsUpdate() {
+            if (this.debouncedUpdateStats) {
+              clearTimeout(this.debouncedUpdateStats);
+            }
+            this.debouncedUpdateStats = setTimeout(() => {
+              this.scheduleStatsUpdate();
+            }, 100);
           }
-
-          container.innerHTML = mrs.merge_requests.map(createMRCard).join("");
-          updateStats();
-        } catch (error) {
-          document.getElementById("mergeRequests").innerHTML =
-            `<div class="error">Error loading Merge Requests: ${error.message}</div>`;
         }
       }
-
-      document.addEventListener("DOMContentLoaded", () => {
-        loadMergeRequests();
-
-        setInterval(loadMergeRequests, 30000);
-      });
     </script>
   </body>
 </html>
-
