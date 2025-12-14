@@ -825,7 +825,7 @@
           // Initialize
           async init() {
             // Test snackbar
-            this.showSnackbar('Aplikacja uruchomiona', 'Code Review AI jest gotowy do pracy', 'success', 3000);
+            this.showSnackbar('Application started', 'Code Review AI is ready', 'success', 3000);
             
             await this.loadMergeRequests();
             await this.updateStats();
@@ -836,7 +836,7 @@
           async loadMergeRequests() {
             try {
               this.loading = true;
-              this.showSnackbar('Ładowanie', 'Pobieranie Merge Requests...', 'info', 2000);
+              this.showSnackbar('Loading', 'Fetching Merge Requests...', 'info', 2000);
               const response = await fetch('/api/v1/merge-requests?state=opened');
               if (!response.ok) throw new Error('Error fetching MRs');
               const data = await response.json();
@@ -854,9 +854,9 @@
               }));
               
               this.loadReviewResults();
-              this.showSnackbar('Załadowano', `Pobrano ${data.merge_requests.length} Merge Requests`, 'success', 3000);
+              this.showSnackbar('Loaded', `Fetched ${data.merge_requests.length} Merge Requests`, 'success', 3000);
             } catch (error) {
-              this.showSnackbar('Błąd ładowania', 'Nie udało się załadować Merge Requests: ' + error.message, 'error');
+              this.showSnackbar('Loading error', 'Failed to load Merge Requests: ' + error.message, 'error');
             } finally {
               this.loading = false;
             }
@@ -912,7 +912,7 @@
               }
             } catch (error) {
               mr.loadingDetails = false;
-              this.showSnackbar('Błąd szczegółów', 'Nie udało się pobrać szczegółów MR: ' + error.message, 'error');
+              this.showSnackbar('Details error', 'Failed to fetch MR details: ' + error.message, 'error');
             }
           },
 
@@ -934,14 +934,14 @@
               
               // Force update stats immediately
               this.scheduleStatsUpdate();
-              this.showSnackbar('Recenzja zakończona', `MR #${mr.iid} został przeanalizowany przez AI`, 'success');
+              this.showSnackbar('Review completed', `MR #${mr.iid} has been analyzed by AI`, 'success');
               
               // Highlight syntax
               if (typeof Prism !== 'undefined') {
                 setTimeout(() => Prism.highlightAll(), 100);
               }
         } catch (error) {
-              this.showSnackbar('Błąd recenzji', 'Nie udało się przeprowadzić recenzji MR: ' + error.message, 'error');
+              this.showSnackbar('Review error', 'Failed to perform MR review: ' + error.message, 'error');
             } finally {
               mr.reviewing = false;
             }
@@ -956,7 +956,7 @@
             }
             this.clearReviewResult(iid);
             this.scheduleStatsUpdate();
-            this.showSnackbar('Recenzja usunięta', `Recenzja dla MR #${iid} została usunięta`, 'info');
+            this.showSnackbar('Review cleared', `Review for MR #${iid} has been cleared`, 'info');
           },
 
           // Snackbar functions
@@ -992,12 +992,12 @@
           // Helper functions
           showMessage(message, type = 'success') {
             const titles = {
-              success: 'Sukces',
-              error: 'Błąd',
-              warning: 'Ostrzeżenie',
-              info: 'Informacja'
+              success: 'Success',
+              error: 'Error',
+              warning: 'Warning',
+              info: 'Information'
             };
-            this.showSnackbar(titles[type] || 'Informacja', message, type);
+            this.showSnackbar(titles[type] || 'Information', message, type);
           },
 
           formatDate(dateString) {

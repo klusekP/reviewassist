@@ -25,14 +25,14 @@ func (r *ReviewService) GetMergeRequests(c *gin.Context) {
 
 	mrs, err := r.gitlabService.GetMergeRequests(state)
 	if err != nil {
-		logrus.Errorf("Błąd pobierania merge requests: %v", err)
+		logrus.Errorf("Error fetching merge requests: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd pobierania merge requests",
+			"error": "Error fetching merge requests",
 		})
 		return
 	}
 
-	logrus.Infof("Pobrano %d merge requests", len(mrs))
+	logrus.Infof("Fetched %d merge requests", len(mrs))
 
 	c.JSON(http.StatusOK, gin.H{
 		"merge_requests": mrs,
@@ -45,23 +45,23 @@ func (r *ReviewService) GetMergeRequest(c *gin.Context) {
 	iid, err := strconv.Atoi(iidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Nieprawidłowy ID merge request",
+			"error": "Invalid merge request ID",
 		})
 		return
 	}
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
-		logrus.Errorf("Błąd pobierania merge request %d: %v", iid, err)
+		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd pobierania merge request",
+			"error": "Error fetching merge request",
 		})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
-		logrus.Errorf("Błąd pobierania diff dla MR %d: %v", iid, err)
+		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -76,40 +76,40 @@ func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 	iid, err := strconv.Atoi(iidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Nieprawidłowy ID merge request",
+			"error": "Invalid merge request ID",
 		})
 		return
 	}
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
-		logrus.Errorf("Błąd pobierania merge request %d: %v", iid, err)
+		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd pobierania merge request",
+			"error": "Error fetching merge request",
 		})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
-		logrus.Errorf("Błąd pobierania diff dla MR %d: %v", iid, err)
+		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd pobierania diff",
+			"error": "Error fetching diff",
 		})
 		return
 	}
 
 	review, err := r.aiService.ReviewCode(diffs, mr.Title, mr.Description)
 	if err != nil {
-		logrus.Errorf("Błąd recenzji AI dla MR %d: %v", iid, err)
+		logrus.Errorf("Error performing AI review for MR %d: %v", iid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd przeprowadzania recenzji AI",
+			"error": "Error performing AI review",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "Recenzja zakończona pomyślnie",
+		"message":        "Review completed successfully",
 		"review":         review,
 		"comments_added": 0,
 		"merge_request":  mr,
@@ -119,9 +119,9 @@ func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 func (r *ReviewService) GetProjects(c *gin.Context) {
 	projects, err := r.gitlabService.GetProjects()
 	if err != nil {
-		logrus.Errorf("Błąd pobierania projektów: %v", err)
+		logrus.Errorf("Error fetching projects: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Błąd pobierania projektów",
+			"error": "Error fetching projects",
 		})
 		return
 	}
@@ -135,7 +135,7 @@ func (r *ReviewService) GetProjects(c *gin.Context) {
 func (r *ReviewService) GetStats(c *gin.Context) {
 	mrs, err := r.gitlabService.GetMergeRequests("opened")
 	if err != nil {
-		logrus.Errorf("Błąd pobierania statystyk: %v", err)
+		logrus.Errorf("Error fetching stats: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"totalMRs":    "-",
 			"reviewedMRs": "-",
@@ -145,8 +145,8 @@ func (r *ReviewService) GetStats(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implementuj logikę statystyk na podstawie zapisanych recenzji
-	// Na razie zwracamy podstawowe dane
+	// TODO: Implement statistics logic based on saved reviews
+	// For now, return basic data
 	c.JSON(http.StatusOK, gin.H{
 		"totalMRs":    len(mrs),
 		"reviewedMRs": 0,   // TODO: policz z localStorage lub bazy danych

@@ -58,13 +58,13 @@ func NewGitLabService() *GitLabService {
 
 	client, err := gitlab.NewClient(token, gitlab.WithBaseURL(gitlabURL))
 	if err != nil {
-		logrus.Fatalf("Błąd tworzenia klienta GitLab: %v", err)
+		logrus.Fatalf("Error creating GitLab client: %v", err)
 	}
 
 	projectIDStr := os.Getenv("GITLAB_PROJECT_ID")
 	projectID, err := strconv.Atoi(projectIDStr)
 	if err != nil {
-		logrus.Fatalf("Nieprawidłowy GITLAB_PROJECT_ID: %v", err)
+		logrus.Fatalf("Invalid GITLAB_PROJECT_ID: %v", err)
 	}
 
 	return &GitLabService{
@@ -80,7 +80,7 @@ func (g *GitLabService) GetMergeRequests(state string) ([]MergeRequest, error) {
 
 	mrs, _, err := g.client.MergeRequests.ListProjectMergeRequests(g.projectID, opts)
 	if err != nil {
-		return nil, fmt.Errorf("błąd pobierania merge requests: %v", err)
+		return nil, fmt.Errorf("error fetching merge requests: %v", err)
 	}
 
 	var result []MergeRequest
@@ -110,7 +110,7 @@ func (g *GitLabService) GetMergeRequests(state string) ([]MergeRequest, error) {
 func (g *GitLabService) GetMergeRequest(iid int) (*MergeRequest, error) {
 	mr, _, err := g.client.MergeRequests.GetMergeRequest(g.projectID, iid, &gitlab.GetMergeRequestsOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("błąd pobierania merge request: %v", err)
+		return nil, fmt.Errorf("error fetching merge request: %v", err)
 	}
 
 	return &MergeRequest{
@@ -135,7 +135,7 @@ func (g *GitLabService) GetMergeRequest(iid int) (*MergeRequest, error) {
 func (g *GitLabService) GetMergeRequestDiffs(iid int) ([]Diff, error) {
 	diffs, _, err := g.client.MergeRequests.ListMergeRequestDiffs(g.projectID, iid, &gitlab.ListMergeRequestDiffsOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("błąd pobierania diff: %v", err)
+		return nil, fmt.Errorf("error fetching diff: %v", err)
 	}
 
 	var result []Diff
@@ -162,7 +162,7 @@ func (g *GitLabService) AddComment(iid int, body string, line int, path string) 
 
 	_, _, err := g.client.Notes.CreateMergeRequestNote(g.projectID, iid, opts)
 	if err != nil {
-		return fmt.Errorf("błąd dodawania komentarza: %v", err)
+		return fmt.Errorf("error adding comment: %v", err)
 	}
 
 	return nil
@@ -175,7 +175,7 @@ func (g *GitLabService) GetProjects() ([]Project, error) {
 
 	projects, _, err := g.client.Projects.ListProjects(opts)
 	if err != nil {
-		return nil, fmt.Errorf("błąd pobierania projektów: %v", err)
+		return nil, fmt.Errorf("error fetching projects: %v", err)
 	}
 
 	var result []Project

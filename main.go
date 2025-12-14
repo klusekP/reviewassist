@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		logrus.Warn("Nie znaleziono pliku .env")
+		logrus.Warn(".env file not found")
 	}
 
 	logrus.SetFormatter(&logrus.TextFormatter{
@@ -23,7 +23,7 @@ func main() {
 	requiredEnvVars := []string{"GITLAB_TOKEN", "OPENAI_API_KEY", "GITLAB_PROJECT_ID"}
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
-			logrus.Fatalf("Brak wymaganej zmiennej środowiskowej: %s", envVar)
+			logrus.Fatalf("Missing required environment variable: %s", envVar)
 		}
 	}
 
@@ -55,7 +55,7 @@ func main() {
 	api := router.Group("/api/v1")
 	{
 		api.GET("/health", func(c *gin.Context) {
-			c.JSON(200, gin.H{"status": "OK", "message": "Code Review AI działa poprawnie"})
+			c.JSON(200, gin.H{"status": "OK", "message": "Code Review AI is running correctly"})
 		})
 
 		api.GET("/merge-requests", reviewService.GetMergeRequests)
@@ -70,9 +70,9 @@ func main() {
 		port = "8080"
 	}
 
-	logrus.Infof("Serwer uruchamiany na porcie %s", port)
-	logrus.Infof("Interfejs webowy dostępny pod adresem: http://localhost:%s", port)
+	logrus.Infof("Server starting on port %s", port)
+	logrus.Infof("Web interface available at: http://localhost:%s", port)
 	if err := router.Run(":" + port); err != nil {
-		log.Fatal("Błąd uruchamiania serwera:", err)
+		log.Fatal("Error starting server:", err)
 	}
 }
