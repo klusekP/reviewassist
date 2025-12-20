@@ -1,6 +1,8 @@
 package ai
 
-import "context"
+import (
+	"context"
+)
 
 type Issue struct {
 	Type        string `json:"type"`

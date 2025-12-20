@@ -20,10 +20,13 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
         padding: 20px;
+        overflow-x: hidden;
+        width: 100%;
       }
 
       .container {
         max-width: 1200px;
+        width: 100%;
         margin: 0 auto;
         background: white;
         border-radius: 15px;
@@ -50,6 +53,9 @@
 
       .content {
         padding: 30px;
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
       }
 
       .stats {
@@ -102,6 +108,9 @@
         transition:
           transform 0.2s,
           box-shadow 0.2s;
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
       }
 
       .mr-card:hover {
@@ -120,6 +129,9 @@
         font-weight: bold;
         color: #333;
         font-size: 1.1em;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
       }
 
       .mr-id {
@@ -503,6 +515,102 @@
         content: " ";
       }
 
+      /* Issue/Comment styles for diff lines */
+      .diff-line.has-issue {
+        position: relative;
+      }
+
+      .diff-line-issue {
+        margin-top: 8px;
+        margin-left: 58px;
+        padding: 8px 12px;
+        border-left: 3px solid;
+        background: #fff8e1;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+
+      .diff-line-issue.critical {
+        border-left-color: #d32f2f;
+        background: #ffebee;
+      }
+
+      .diff-line-issue.high {
+        border-left-color: #f57c00;
+        background: #fff3e0;
+      }
+
+      .diff-line-issue.medium {
+        border-left-color: #fbc02d;
+        background: #fffde7;
+      }
+
+      .diff-line-issue.low {
+        border-left-color: #388e3c;
+        background: #e8f5e9;
+      }
+
+      .diff-line-issue-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+
+      .diff-line-issue-type {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: rgba(0,0,0,0.1);
+        font-weight: 500;
+      }
+
+      .diff-line-issue[data-type="refactoring"] .diff-line-issue-type {
+        background: #7b1fa2;
+        color: white;
+        font-weight: 600;
+      }
+
+      .issue-type.refactoring {
+        background: #7b1fa2;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-weight: 600;
+      }
+
+      .diff-line-issue-description {
+        color: #424242;
+        margin-bottom: 4px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
+      }
+
+      .diff-line-issue-fix {
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(0,0,0,0.1);
+        font-size: 11px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
+      }
+
+      .diff-line-issue-fix strong {
+        color: #1976d2;
+      }
+
+      .diff-line-issue-code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+        background: rgba(0,0,0,0.05);
+        padding: 4px 6px;
+        border-radius: 3px;
+        margin-top: 4px;
+        font-size: 11px;
+      }
+
       .error {
         background: #f8d7da;
         color: #721c24;
@@ -526,6 +634,11 @@
         padding: 20px;
         margin-top: 15px;
         animation: slideDown 0.3s ease-out;
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
       }
 
       @keyframes slideDown {
@@ -549,6 +662,9 @@
       .review-summary {
         margin-bottom: 15px;
         color: #333;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
       }
 
       .review-files {
@@ -610,6 +726,9 @@
       .issue-description {
         margin-top: 5px;
         color: #666;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
       }
 
       .issue-file {
@@ -640,6 +759,10 @@
         border: 1px solid #c3e6c3;
         border-radius: 5px;
         padding: 10px;
+        overflow-x: auto;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
       }
 
       .issue-fix pre {
@@ -678,9 +801,18 @@
       }
 
       @media (max-width: 768px) {
+        body {
+          padding: 10px;
+        }
+
         .container {
-          margin: 10px;
+          margin: 0;
           border-radius: 10px;
+          width: 100%;
+        }
+
+        .content {
+          padding: 15px;
         }
 
         .header {
@@ -736,7 +868,13 @@
         </div>
 
         <div class="section">
-          <h2>Merge Requests</h2>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; width: 100%; box-sizing: border-box;">
+            <h2 style="margin: 0; flex: 1; min-width: 200px; word-wrap: break-word;">Merge Requests</h2>
+            <button class="btn btn-success" @click="refreshMergeRequests()" :disabled="loading" style="flex-shrink: 0;">
+              <span x-show="loading" class="loading-spinner"></span>
+              <span x-show="!loading">Refresh</span>
+            </button>
+          </div>
           <div class="merge-requests">
             <div x-show="loading" class="loading">Loading...</div>
             <div x-show="!loading && mergeRequests.length === 0" class="loading">No open Merge Requests</div>
@@ -836,22 +974,37 @@
           async loadMergeRequests() {
             try {
               this.loading = true;
+              // Save current view states before refresh
+              const currentStates = {};
+              this.mergeRequests.forEach(mr => {
+                currentStates[mr.iid] = {
+                  showDetails: mr.showDetails,
+                  showReview: mr.showReview,
+                  detailsResult: mr.detailsResult,
+                  reviewResult: mr.reviewResult
+                };
+              });
+              
               this.showSnackbar('Loading', 'Fetching Merge Requests...', 'info', 2000);
               const response = await fetch('/api/v1/merge-requests?state=opened');
               if (!response.ok) throw new Error('Error fetching MRs');
               const data = await response.json();
               
-              this.mergeRequests = data.merge_requests.map(mr => ({
-                ...mr,
-                reviewed: false,
-                reviewing: false,
-                reviewedAt: null,
-                reviewResult: '',
-                showDetails: false,
-                detailsResult: '',
-                showReview: false,
-                loadingDetails: false
-              }));
+              this.mergeRequests = data.merge_requests.map(mr => {
+                // Restore view states from before refresh
+                const savedState = currentStates[mr.iid] || {};
+                return {
+                  ...mr,
+                  reviewed: false,
+                  reviewing: false,
+                  reviewedAt: null,
+                  reviewResult: savedState.reviewResult || '',
+                  showDetails: savedState.showDetails || false,
+                  detailsResult: savedState.detailsResult || '',
+                  showReview: savedState.showReview || false,
+                  loadingDetails: false
+                };
+              });
               
               this.loadReviewResults();
               this.showSnackbar('Loaded', `Fetched ${data.merge_requests.length} Merge Requests`, 'success', 3000);
@@ -905,7 +1058,12 @@
                 try {
                   const response = await fetch(`/api/v1/merge-requests/${iid}`);
                   const data = await response.json();
-                  mr.detailsResult = this.createMRDetailsHTML(data);
+                  
+                  // Get review from localStorage if available
+                  const reviewResults = this.getReviewResults();
+                  const review = reviewResults[iid] || null;
+                  
+                  mr.detailsResult = this.createMRDetailsHTML(data, review);
                 } finally {
                   mr.loadingDetails = false;
                 }
@@ -1011,10 +1169,12 @@
           },
 
           createReviewResultHTML(review) {
-            const issuesHtml = review.issues.map(issue => `
+            const issuesHtml = review.issues.map(issue => {
+              const typeClass = issue.type === 'refactoring' ? 'refactoring' : '';
+              return `
                 <div class="issue ${issue.severity.toLowerCase()}">
                     <div>
-                        <span class="issue-type">${issue.type}</span>
+                        <span class="issue-type ${typeClass}">${issue.type}</span>
                         <span class="issue-severity">(${issue.severity})</span>
                     </div>
                     <div class="issue-description">${issue.description}</div>
@@ -1022,7 +1182,8 @@
                 ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ''}
                 ${issue.fix ? `<div class="issue-fix"><strong>Suggested fix:</strong><pre><code>${issue.fix}</code></pre></div>` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             const suggestionsHtml = review.suggestions.map(s => `<li>${s}</li>`).join('');
 
@@ -1049,7 +1210,20 @@
             `;
           },
 
-          createMRDetailsHTML(data) {
+          createMRDetailsHTML(data, review = null) {
+            // Group issues by file
+            const issuesByFile = {};
+            if (review && review.issues) {
+              review.issues.forEach(issue => {
+                if (issue.file) {
+                  if (!issuesByFile[issue.file]) {
+                    issuesByFile[issue.file] = [];
+                  }
+                  issuesByFile[issue.file].push(issue);
+                }
+              });
+            }
+
             return `
               <div class="mr-details">
                 <h3>Merge Request Details</h3>
@@ -1064,51 +1238,151 @@
                 </div>
                 ${data.diffs && data.diffs.length > 0 ? `
                   <h4>Changes (${data.diff_count} files):</h4>
-                  ${data.diffs.map(diff => `
+                  ${data.diffs.map(diff => {
+                    const fileIssues = issuesByFile[diff.new_path] || [];
+                    return `
                     <div class="diff-container">
                       <div class="diff-header">
                         <span class="diff-file-name">${diff.new_path}</span>
                         <span class="diff-stats">
                           ${diff.new_file ? 'New file' : diff.deleted_file ? 'Deleted file' : diff.renamed_file ? 'Renamed file' : 'Modified file'}
+                          ${fileIssues.length > 0 ? ` • ${fileIssues.length} issue${fileIssues.length > 1 ? 's' : ''}` : ''}
                         </span>
                       </div>
                       <div class="diff-content">
-                        ${this.formatDiff(diff.diff)}
+                        ${this.formatDiff(diff.diff, diff.new_path, fileIssues)}
                       </div>
                     </div>
-                  `).join('')}
+                  `;
+                  }).join('')}
                 ` : '<p>No changes to display</p>'}
               </div>
             `;
           },
 
-          formatDiff(diffText) {
-            return diffText.split('\n').map(line => {
-              if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
-                return `<div class="diff-hunk-header">${line}</div>`;
+          formatDiff(diffText, filePath, issues = []) {
+            // Parse line numbers from diff hunks
+            let currentLineNumber = 0;
+            let hunkStartLine = 0;
+            const issuesByLine = {};
+            
+            // Group issues by line number
+            issues.forEach(issue => {
+              if (issue.line > 0) {
+                if (!issuesByLine[issue.line]) {
+                  issuesByLine[issue.line] = [];
+                }
+                issuesByLine[issue.line].push(issue);
+              }
+            });
+
+            const lines = diffText.split('\n');
+            const result = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              
+              if (line.startsWith('+++') || line.startsWith('---')) {
+                result.push(`<div class="diff-hunk-header">${this.escapeHtml(line)}</div>`);
+              } else if (line.startsWith('@@')) {
+                // Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
+                const match = line.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/);
+                if (match) {
+                  hunkStartLine = parseInt(match[3], 10);
+                  currentLineNumber = hunkStartLine - 1; // Will be incremented for each line in new file
+                }
+                result.push(`<div class="diff-hunk-header">${this.escapeHtml(line)}</div>`);
               } else if (line.startsWith('+')) {
-                return `
-                  <div class="diff-line added">
-                    <span class="diff-line-number added"></span>
-                    <span class="diff-line-content"><code>${line.substring(1)}</code></span>
+                // Added line in new file
+                currentLineNumber++;
+                const lineContent = line.substring(1);
+                const lineIssues = issuesByLine[currentLineNumber] || [];
+                const hasIssue = lineIssues.length > 0;
+                
+                let html = `
+                  <div class="diff-line added${hasIssue ? ' has-issue' : ''}">
+                    <span class="diff-line-number added" data-line="${currentLineNumber}"></span>
+                    <span class="diff-line-content"><code>${this.escapeHtml(lineContent)}</code></span>
                   </div>
                 `;
+                
+                // Add issue comments
+                if (hasIssue) {
+                  lineIssues.forEach(issue => {
+                    html += `
+                      <div class="diff-line-issue ${issue.severity.toLowerCase()}" data-type="${this.escapeHtml(issue.type)}">
+                        <div class="diff-line-issue-header">
+                          <span class="diff-line-issue-type">${this.escapeHtml(issue.type)}</span>
+                          <span>${this.escapeHtml(issue.severity)}</span>
+                        </div>
+                        <div class="diff-line-issue-description">${this.escapeHtml(issue.description)}</div>
+                        ${issue.code ? `<div class="diff-line-issue-code">${this.escapeHtml(issue.code)}</div>` : ''}
+                        ${issue.fix ? `
+                          <div class="diff-line-issue-fix">
+                            <strong>Suggested fix:</strong>
+                            <div class="diff-line-issue-code">${this.escapeHtml(issue.fix)}</div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    `;
+                  });
+                }
+                
+                result.push(html);
               } else if (line.startsWith('-')) {
-                return `
+                // Removed line from old file - don't increment line number
+                result.push(`
                   <div class="diff-line removed">
                     <span class="diff-line-number removed"></span>
-                    <span class="diff-line-content"><code>${line.substring(1)}</code></span>
+                    <span class="diff-line-content"><code>${this.escapeHtml(line.substring(1))}</code></span>
                   </div>
-                `;
+                `);
               } else {
-                return `
-                  <div class="diff-line context">
-                    <span class="diff-line-number context"></span>
-                    <span class="diff-line-content"><code>${line}</code></span>
+                // Context line - exists in both files, increment line number
+                currentLineNumber++;
+                const lineIssues = issuesByLine[currentLineNumber] || [];
+                const hasIssue = lineIssues.length > 0;
+                
+                let html = `
+                  <div class="diff-line context${hasIssue ? ' has-issue' : ''}">
+                    <span class="diff-line-number context" data-line="${currentLineNumber}"></span>
+                    <span class="diff-line-content"><code>${this.escapeHtml(line)}</code></span>
                   </div>
                 `;
+                
+                // Add issue comments for context lines too
+                if (hasIssue) {
+                  lineIssues.forEach(issue => {
+                    html += `
+                      <div class="diff-line-issue ${issue.severity.toLowerCase()}" data-type="${this.escapeHtml(issue.type)}">
+                        <div class="diff-line-issue-header">
+                          <span class="diff-line-issue-type">${this.escapeHtml(issue.type)}</span>
+                          <span>${this.escapeHtml(issue.severity)}</span>
+                        </div>
+                        <div class="diff-line-issue-description">${this.escapeHtml(issue.description)}</div>
+                        ${issue.code ? `<div class="diff-line-issue-code">${this.escapeHtml(issue.code)}</div>` : ''}
+                        ${issue.fix ? `
+                          <div class="diff-line-issue-fix">
+                            <strong>Suggested fix:</strong>
+                            <div class="diff-line-issue-code">${this.escapeHtml(issue.fix)}</div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    `;
+                  });
+                }
+                
+                result.push(html);
               }
-            }).join('');
+            }
+            
+            return result.join('');
+          },
+
+          escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
           },
 
           // Local storage
@@ -1129,8 +1403,12 @@
               if (results[mr.iid]) {
                 mr.reviewed = true;
                 mr.reviewedAt = results[mr.iid].timestamp;
-                mr.reviewResult = this.createReviewResultHTML(results[mr.iid]);
-                mr.showReview = false; // Start collapsed
+                // Only set reviewResult if it's not already set (preserve existing state)
+                if (!mr.reviewResult) {
+                  mr.reviewResult = this.createReviewResultHTML(results[mr.iid]);
+                }
+                // Don't reset showReview if it's already open
+                // mr.showReview stays as is
               }
             });
             this.scheduleStatsUpdate();
@@ -1142,12 +1420,16 @@
             localStorage.setItem('codereview_results', JSON.stringify(results));
           },
 
-          // Auto refresh
+          // Auto refresh - only for stats, not merge requests
           startAutoRefresh() {
             setInterval(() => {
-              this.loadMergeRequests();
+              // Only refresh stats, not merge requests list
               this.scheduleStatsUpdate();
             }, 30000);
+          },
+
+          async refreshMergeRequests() {
+            await this.loadMergeRequests();
           },
 
           // Debounced update stats

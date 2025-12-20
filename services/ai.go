@@ -1,98 +1,82 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 
-	"github.com/sashabaranov/go-openai"
+	"codereviewAI/services/ai"
+	aiClaude "codereviewAI/services/ai/cloude"
+	aiOllama "codereviewAI/services/ai/ollama"
+	aiOpenAI "codereviewAI/services/ai/openai"
+
 	"github.com/sirupsen/logrus"
 )
 
 type AIService struct {
-	openaiClient *openai.Client
-	claudeAPIKey string
-	model        string
+	aiProvider ai.Ai
 }
 
-type CodeReview struct {
-	Summary     string   `json:"summary"`
-	Issues      []Issue  `json:"issues"`
-	Suggestions []string `json:"suggestions"`
-	Score       int      `json:"score"` // 1-10
-}
-
-type Issue struct {
-	Type        string `json:"type"`     // "bug", "security", "performance", "style", "best_practice"
-	Severity    string `json:"severity"` // "low", "medium", "high", "critical"
-	Description string `json:"description"`
-	File        string `json:"file"`
-	Line        int    `json:"line"`
-	Code        string `json:"code"`
-	Fix         string `json:"fix"`
-}
-
-// Claude API request/response structures
-type ClaudeRequest struct {
-	Model       string    `json:"model"`
-	MaxTokens   int       `json:"max_tokens"`
-	Temperature float64   `json:"temperature"`
-	Messages    []Message `json:"messages"`
-}
-
-type Message struct {
-	Role    string    `json:"role"`
-	Content []Content `json:"content"`
-}
-
-type Content struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type ClaudeResponse struct {
-	Content []ClaudeContent `json:"content"`
-}
-
-type ClaudeContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
+// CodeReview and Issue are aliased from ai package for backward compatibility
+type CodeReview = ai.CodeReview
+type Issue = ai.Issue
 
 func NewAIService() *AIService {
-	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
-	claudeAPIKey := os.Getenv("CLAUDE_API_KEY")
 	model := os.Getenv("AI_MODEL")
-
 	if model == "" {
 		model = "openai" // default to OpenAI
 	}
 
-	var openaiClient *openai.Client
-	if openaiAPIKey != "" {
-		openaiClient = openai.NewClient(openaiAPIKey)
+	var aiProvider ai.Ai
+	var err error
+
+	switch model {
+	case "claude":
+		claudeAPIKey := os.Getenv("CLAUDE_API_KEY")
+		aiProvider, err = aiClaude.NewService(claudeAPIKey)
+		if err != nil {
+			logrus.Errorf("Failed to create Claude service: %v", err)
+			// Fallback to OpenAI if Claude fails
+			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
+		}
+	case "ollama":
+		ollamaModel := os.Getenv("OLLAMA_MODEL")
+		aiProvider, err = aiOllama.NewService(ollamaModel)
+		if err != nil {
+			logrus.Errorf("Failed to create Ollama service: %v", err)
+			// Fallback to OpenAI if Ollama fails
+			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
+		}
+	case "openai":
+		fallthrough
+	default:
+		openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+		aiProvider, err = aiOpenAI.NewService(openaiAPIKey)
+		if err != nil {
+			logrus.Errorf("Failed to create OpenAI service: %v", err)
+		}
 	}
 
 	return &AIService{
-		openaiClient: openaiClient,
-		claudeAPIKey: claudeAPIKey,
-		model:        model,
+		aiProvider: aiProvider,
 	}
 }
 
 func (a *AIService) ReviewCode(diffs []Diff, mrTitle, mrDescription string) (*CodeReview, error) {
+	if a.aiProvider == nil {
+		return a.createFallbackReview(diffs), fmt.Errorf("AI provider is not configured")
+	}
+
 	contextStr := a.buildContext(diffs, mrTitle, mrDescription)
 
 	if len(contextStr) > 3000 {
 		contextStr = contextStr[:3000] + "\n\n[Code was truncated due to token limit]"
 	}
 
-	prompt := `You are an experienced programmer and code reviewer. Analyze the following code changes and perform a detailed code review.
+	prompt := `You are an experienced senior software architect and code reviewer. Analyze the following code changes and perform a comprehensive code review with focus on code quality, design principles, and refactoring opportunities.
 
 Review guidelines:
 1. Check logical and syntactic correctness
@@ -102,23 +86,49 @@ Review guidelines:
 5. Check error handling
 6. Pay attention to tests
 
+DESIGN PRINCIPLES ANALYSIS (CRITICAL):
+7. SOLID Principles:
+   - Single Responsibility Principle (SRP): Each class/function should have one reason to change
+   - Open/Closed Principle (OCP): Open for extension, closed for modification
+   - Liskov Substitution Principle (LSP): Subtypes must be substitutable for their base types
+   - Interface Segregation Principle (ISP): Clients shouldn't depend on interfaces they don't use
+   - Dependency Inversion Principle (DIP): Depend on abstractions, not concretions
+8. KISS (Keep It Simple, Stupid): Code should be as simple as possible
+9. DRY (Don't Repeat Yourself): Avoid code duplication
+10. YAGNI (You Aren't Gonna Need It): Don't add functionality until needed
+11. Clean Code principles: Meaningful names, small functions, clear structure
+12. Design Patterns: Identify opportunities to apply appropriate patterns
+
+REFACTORING FOCUS:
+- Analyze NEW CODE (lines starting with +) for refactoring opportunities
+- Suggest concrete refactorings to improve code quality
+- Propose better structure, separation of concerns, and abstraction levels
+- Identify code smells: long methods, large classes, duplicated code, feature envy, etc.
+- Suggest improvements for maintainability, testability, and extensibility
+
 Respond in JSON format:
 {
-  "summary": "Brief summary of the review",
+  "summary": "Brief summary of the review including overall code quality assessment",
   "issues": [
     {
-      "type": "bug|security|performance|style|best_practice",
+      "type": "bug|security|performance|style|best_practice|refactoring",
       "severity": "low|medium|high|critical",
-      "description": "Problem description",
+      "description": "Detailed problem description with explanation of why it violates principles (e.g., 'Violates SRP: function handles both data validation and database operations')",
       "file": "file path",
       "line": line_number,
-      "code": "code snippet",
-      "fix": "suggested fix"
+      "code": "code snippet that needs improvement",
+      "fix": "Concrete refactoring suggestion with example code showing how to improve it. For refactoring issues, provide before/after code examples."
     }
   ],
-  "suggestions": ["list of general suggestions"],
+  "suggestions": ["list of general suggestions for overall improvement"],
   "score": score_1_10
 }
+
+IMPORTANT:
+- Focus especially on NEW CODE (added lines marked with +)
+- For each refactoring suggestion, explain which principle it violates and how the refactoring improves it
+- Provide concrete, actionable refactoring proposals with code examples
+- Prioritize issues that affect code maintainability and extensibility
 
 Context:
 MR Title: ` + mrTitle + `
@@ -127,113 +137,13 @@ MR Description: ` + mrDescription + `
 Code changes:
 ` + contextStr
 
-	switch a.model {
-	case "claude":
-		return a.reviewWithClaude(prompt)
-	case "ollama":
-		// TODO: implement OLLAMA
-		fallthrough
-	case "openai":
-		fallthrough
-	default:
-		return a.reviewWithOpenAI(prompt)
-	}
-}
-
-func (a *AIService) reviewWithOpenAI(prompt string) (*CodeReview, error) {
-	if a.openaiClient == nil {
-		return nil, fmt.Errorf("OpenAI client is not configured")
-	}
-
-	resp, err := a.openaiClient.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a code review expert. Respond only in JSON format. All responses must be in English.",
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
-			Temperature: 0.3,
-			MaxTokens:   2000,
-		},
-	)
+	review, err := a.aiProvider.Review(context.Background(), prompt)
 	if err != nil {
-		return nil, fmt.Errorf("error calling OpenAI API: %v", err)
+		logrus.Warnf("Failed to get AI review: %v. Using fallback review.", err)
+		return a.createFallbackReview(diffs), nil
 	}
 
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from OpenAI API")
-	}
-
-	content := resp.Choices[0].Message.Content
-	return a.parseReviewResponse(content)
-}
-
-func (a *AIService) reviewWithClaude(prompt string) (*CodeReview, error) {
-	if a.claudeAPIKey == "" {
-		return nil, fmt.Errorf("claude API key is not configured")
-	}
-
-	requestBody := ClaudeRequest{
-		Model:       "claude-sonnet-4-20250514",
-		MaxTokens:   2000,
-		Temperature: 0.3,
-		Messages: []Message{
-			{
-				Role: "user",
-				Content: []Content{
-					{
-						Type: "text",
-						Text: "You are a code review expert. Respond only in JSON format. All responses must be in English.\n\n" + prompt,
-					},
-				},
-			},
-		},
-	}
-
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.claudeAPIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error calling Claude API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("claude API error: %s - %s", resp.Status, string(body))
-	}
-
-	var claudeResp ClaudeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
-		return nil, fmt.Errorf("error decoding Claude response: %v", err)
-	}
-
-	if len(claudeResp.Content) == 0 {
-		return nil, fmt.Errorf("no response from Claude API")
-	}
-
-	content := claudeResp.Content[0].Text
-	return a.parseReviewResponse(content)
+	return review, nil
 }
 
 func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) string {
@@ -266,30 +176,6 @@ func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) st
 	}
 
 	return context.String()
-}
-
-func (a *AIService) parseReviewResponse(content string) (*CodeReview, error) {
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimSuffix(content, "```")
-	content = strings.TrimSpace(content)
-
-	var review CodeReview
-	if err := json.Unmarshal([]byte(content), &review); err != nil {
-		logrus.Warnf("Failed to parse AI response: %v. Content: %s", err, content)
-		return a.createFallbackReview([]Diff{}), nil
-	}
-
-	if review.Summary == "" {
-		review.Summary = "Automatic code review"
-	}
-	if review.Score == 0 {
-		review.Score = 5
-	}
-	if review.Score > 10 {
-		review.Score = 10
-	}
-
-	return &review, nil
 }
 
 func (a *AIService) createFallbackReview(diffs []Diff) *CodeReview {
