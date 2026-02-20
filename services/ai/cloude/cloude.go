@@ -53,8 +53,8 @@ func NewService(apiKey string) (*Service, error) {
 
 func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, error) {
 	requestBody := ClaudeRequest{
-		Model:       "claude-sonnet-4-20250514",
-		MaxTokens:   2000,
+		Model:       "claude-sonnet-4-5-20250929",
+		MaxTokens:   8192, // code review JSON can be long; 2k was causing truncated "unexpected end of JSON input"
 		Temperature: 0.3,
 		Messages: []Message{
 			{
@@ -109,13 +109,21 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 }
 
 func parseReviewResponse(content string) (*ai.CodeReview, error) {
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```") {
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		content = strings.TrimSuffix(content, "```")
+		content = strings.TrimSpace(content)
+	}
+
+	if content == "" {
+		return nil, fmt.Errorf("failed to parse AI response: empty response")
+	}
 
 	var review ai.CodeReview
 	if err := json.Unmarshal([]byte(content), &review); err != nil {
-		return nil, fmt.Errorf("failed to parse AI response: %v", err)
+		return nil, fmt.Errorf("failed to parse AI response: %v (response may be truncated; try increasing max_tokens)", err)
 	}
 
 	if review.Summary == "" {

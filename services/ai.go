@@ -18,14 +18,15 @@ type AIService struct {
 	aiProvider ai.Ai
 }
 
-// CodeReview and Issue are aliased from ai package for backward compatibility
-type CodeReview = ai.CodeReview
-type Issue = ai.Issue
+type (
+	CodeReview = ai.CodeReview
+	Issue      = ai.Issue
+)
 
 func NewAIService() *AIService {
 	model := os.Getenv("AI_MODEL")
 	if model == "" {
-		model = "openai" // default to OpenAI
+		model = "openai"
 	}
 
 	var aiProvider ai.Ai
@@ -37,7 +38,6 @@ func NewAIService() *AIService {
 		aiProvider, err = aiClaude.NewService(claudeAPIKey)
 		if err != nil {
 			logrus.Errorf("Failed to create Claude service: %v", err)
-			// Fallback to OpenAI if Claude fails
 			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
 		}
@@ -46,7 +46,6 @@ func NewAIService() *AIService {
 		aiProvider, err = aiOllama.NewService(ollamaModel)
 		if err != nil {
 			logrus.Errorf("Failed to create Ollama service: %v", err)
-			// Fallback to OpenAI if Ollama fails
 			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
 		}
@@ -98,6 +97,13 @@ DESIGN PRINCIPLES ANALYSIS (CRITICAL):
 10. YAGNI (You Aren't Gonna Need It): Don't add functionality until needed
 11. Clean Code principles: Meaningful names, small functions, clear structure
 12. Design Patterns: Identify opportunities to apply appropriate patterns
+13. Test Driven Development (TDD): Write tests before writing code
+14. Check directory structure and file naming conventions
+15. Use consistent naming conventions for variables, functions, and classes
+16. Avoid magic numbers and use constants instead
+17. Use appropriate data structures and algorithms
+18. Document code clearly and concisely
+19. Use comments to explain complex code logic
 
 REFACTORING FOCUS:
 - Analyze NEW CODE (lines starting with +) for refactoring opportunities
