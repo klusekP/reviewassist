@@ -8,6 +8,7 @@ import (
 
 	"codereviewAI/services/ai"
 	aiClaude "codereviewAI/services/ai/cloude"
+	aiKimi "codereviewAI/services/ai/kimi"
 	aiOllama "codereviewAI/services/ai/ollama"
 	aiOpenAI "codereviewAI/services/ai/openai"
 
@@ -38,6 +39,14 @@ func NewAIService() *AIService {
 		aiProvider, err = aiClaude.NewService(claudeAPIKey)
 		if err != nil {
 			logrus.Errorf("Failed to create Claude service: %v", err)
+			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
+		}
+	case "kimi":
+		kimiAPIKey := os.Getenv("KIMI_API_KEY")
+		aiProvider, err = aiKimi.NewService(kimiAPIKey)
+		if err != nil {
+			logrus.Errorf("Failed to create KIMI service: %v", err)
 			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
 		}

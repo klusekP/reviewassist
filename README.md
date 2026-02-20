@@ -17,7 +17,7 @@ AI application for automatic code review of GitLab Merge Requests. The applicati
 
 - Go 1.21+
 - GitLab Personal Access Token
-- OpenAI API Key
+- AI API Key (OpenAI, Claude, KIMI, or Ollama)
 
 ## Installation
 
@@ -43,6 +43,9 @@ GITLAB_TOKEN=your_gitlab_personal_access_token
 GITLAB_URL=https://gitlab.com
 GITLAB_PROJECT_ID=123456
 OPENAI_API_KEY=your_openai_api_key
+CLAUDE_API_KEY=your_claude_api_key
+KIMI_API_KEY=your_kimi_api_key
+AI_MODEL=openai  # Options: openai, claude, kimi, ollama
 PORT=8080
 ```
 
@@ -63,13 +66,40 @@ go run main.go
    - Project ID is located on the project's main page
    - Add to the `GITLAB_PROJECT_ID` variable
 
-## OpenAI Configuration
+## AI Model Configuration
 
+The application supports multiple AI providers. Set the `AI_MODEL` environment variable to choose your provider:
+
+### OpenAI Configuration
 1. **Create OpenAI account:**
    - Go to [OpenAI](https://platform.openai.com/)
    - Create an account and add funds
    - Generate API Key
    - Add to the `OPENAI_API_KEY` variable
+   - Set `AI_MODEL=openai`
+
+### Claude Configuration
+1. **Create Anthropic account:**
+   - Go to [Anthropic](https://console.anthropic.com/)
+   - Create an account and add funds
+   - Generate API Key
+   - Add to the `CLAUDE_API_KEY` variable
+   - Set `AI_MODEL=claude`
+
+### KIMI Configuration
+1. **Create KIMI (Moonshot AI) account:**
+   - Go to [Moonshot AI](https://platform.moonshot.cn/)
+   - Create an account
+   - Generate API Key
+   - Add to the `KIMI_API_KEY` variable
+   - Set `AI_MODEL=kimi`
+   - Model used: `moonshot-v1-32k` (KIMI k2.5 Free)
+
+### Ollama Configuration
+1. **Install Ollama locally:**
+   - Follow instructions at [Ollama](https://ollama.ai/)
+   - Set `OLLAMA_MODEL` to your preferred model
+   - Set `AI_MODEL=ollama`
 
 ## API Endpoints
 
