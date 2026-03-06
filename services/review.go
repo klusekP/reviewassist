@@ -11,12 +11,14 @@ import (
 type ReviewService struct {
 	gitlabService *GitLabService
 	aiService     *AIService
+	wsHub         *WSHub
 }
 
-func NewReviewService(gitlabService *GitLabService, aiService *AIService) *ReviewService {
+func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub) *ReviewService {
 	return &ReviewService{
 		gitlabService: gitlabService,
 		aiService:     aiService,
+		wsHub:         wsHub,
 	}
 }
 
@@ -73,6 +75,7 @@ func (r *ReviewService) GetMergeRequest(c *gin.Context) {
 
 func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 	iidStr := c.Param("id")
+	logrus.Infof("[Review] Starting review for MR %s (background)", iidStr)
 	iid, err := strconv.Atoi(iidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -99,21 +102,25 @@ func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 		return
 	}
 
-	review, err := r.aiService.ReviewCode(diffs, mr.Title, mr.Description)
-	if err != nil {
-		logrus.Errorf("Error performing AI review for MR %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error performing AI review",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":        "Review completed successfully",
-		"review":         review,
-		"comments_added": 0,
-		"merge_request":  mr,
+	// Return 202 immediately, run review in background
+	c.JSON(http.StatusAccepted, gin.H{
+		"status":   "started",
+		"message":  "Review started. Results will be delivered via WebSocket.",
+		"mr_id":    iid,
+		"mr_title": mr.Title,
 	})
+
+	// Run AI review in background and broadcast result via WebSocket
+	go func() {
+		review, err := r.aiService.ReviewCode(diffs, mr.Title, mr.Description)
+		if err != nil {
+			logrus.Errorf("Error performing AI review for MR %d: %v", iid, err)
+			r.wsHub.BroadcastReviewError(iid, err.Error())
+			return
+		}
+		r.wsHub.BroadcastReview(iid, review)
+		logrus.Infof("[Review] MR %d review completed, sent via WebSocket", iid)
+	}()
 }
 
 func (r *ReviewService) GetProjects(c *gin.Context) {

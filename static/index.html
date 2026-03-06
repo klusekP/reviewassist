@@ -929,9 +929,9 @@
     </div>
 
     <!-- Snackbar -->
-    <div x-show="snackbar.show" 
-         class="snackbar" 
-         :class="snackbar.type">
+    <div x-show="snackbar.show"
+         class="snackbar"
+         :class="[snackbar.type, snackbar.show ? 'show' : '']">
       <div class="snackbar-icon" x-text="snackbar.icon"></div>
       <div class="snackbar-content">
         <div class="snackbar-title" x-text="snackbar.title"></div>
@@ -962,12 +962,55 @@
 
           // Initialize
           async init() {
-            // Test snackbar
+            this.connectWebSocket();
             this.showSnackbar('Application started', 'Code Review AI is ready', 'success', 3000);
             
             await this.loadMergeRequests();
             await this.updateStats();
             this.startAutoRefresh();
+          },
+
+          connectWebSocket() {
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${location.host}/api/v1/ws`;
+            try {
+              this.ws = new WebSocket(wsUrl);
+              this.ws.onmessage = (e) => this.handleWSMessage(e);
+              this.ws.onclose = () => {
+                console.log('[WS] Disconnected, reconnecting in 5s...');
+                setTimeout(() => this.connectWebSocket(), 5000);
+              };
+              this.ws.onerror = () => {};
+            } catch (err) {
+              console.warn('[WS] Connection failed:', err);
+              setTimeout(() => this.connectWebSocket(), 5000);
+            }
+          },
+
+          handleWSMessage(e) {
+            try {
+              const msg = JSON.parse(e.data);
+              if (msg.type === 'review' && msg.mr_id != null && msg.review) {
+                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
+                if (mr) {
+                  mr.reviewed = true;
+                  mr.reviewedAt = new Date().toISOString();
+                  mr.reviewResult = this.createReviewResultHTML(msg.review);
+                  mr.showReview = true;
+                  mr.reviewing = false;
+                  this.saveReviewResult(msg.mr_id, msg.review);
+                  this.scheduleStatsUpdate();
+                  this.showSnackbar('Review completed', `MR #${msg.mr_id} has been analyzed by AI`, 'success');
+                  if (typeof Prism !== 'undefined') setTimeout(() => Prism.highlightAll(), 100);
+                }
+              } else if (msg.type === 'review_error' && msg.mr_id != null) {
+                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
+                if (mr) mr.reviewing = false;
+                this.showSnackbar('Review error', msg.message || msg.error || 'AI review failed', 'error');
+              }
+            } catch (err) {
+              console.warn('[WS] Message parse error:', err);
+            }
           },
 
           // API calls
@@ -1084,24 +1127,21 @@
               if (!response.ok) throw new Error('Review error');
               const data = await response.json();
               
-              mr.reviewed = true;
-              mr.reviewedAt = new Date().toISOString();
-              mr.reviewResult = this.createReviewResultHTML(data.review);
-              mr.showReview = true; // Show review results after completion
-              this.saveReviewResult(mr.iid, data.review);
-              
-              // Force update stats immediately
-              this.scheduleStatsUpdate();
-              this.showSnackbar('Review completed', `MR #${mr.iid} has been analyzed by AI`, 'success');
-              
-              // Highlight syntax
-              if (typeof Prism !== 'undefined') {
-                setTimeout(() => Prism.highlightAll(), 100);
+              if (response.status === 202) {
+                this.showSnackbar('Review started', `MR #${mr.iid} - AI is analyzing, results will appear when ready`, 'info', 4000);
+              } else {
+                mr.reviewed = true;
+                mr.reviewedAt = new Date().toISOString();
+                mr.reviewResult = this.createReviewResultHTML(data.review);
+                mr.showReview = true;
+                this.saveReviewResult(mr.iid, data.review);
+                this.scheduleStatsUpdate();
+                this.showSnackbar('Review completed', `MR #${mr.iid} has been analyzed by AI`, 'success');
+                if (typeof Prism !== 'undefined') setTimeout(() => Prism.highlightAll(), 100);
               }
-        } catch (error) {
-              this.showSnackbar('Review error', 'Failed to perform MR review: ' + error.message, 'error');
-            } finally {
+            } catch (error) {
               mr.reviewing = false;
+              this.showSnackbar('Review error', 'Failed to start MR review: ' + error.message, 'error');
             }
           },
 
@@ -1439,7 +1479,7 @@
               clearTimeout(this.debouncedUpdateStats);
             }
             this.debouncedUpdateStats = setTimeout(() => {
-              this.scheduleStatsUpdate();
+              this.updateStats();
             }, 100);
           }
         }

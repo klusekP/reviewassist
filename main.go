@@ -48,9 +48,16 @@ func main() {
 		c.File("static/index.html")
 	})
 
+	wsHub := services.NewWSHub()
+	go wsHub.Run()
+
+	router.GET("/api/v1/ws", func(c *gin.Context) {
+		wsHub.HandleWS(c)
+	})
+
 	gitlabService := services.NewGitLabService()
 	aiService := services.NewAIService()
-	reviewService := services.NewReviewService(gitlabService, aiService)
+	reviewService := services.NewReviewService(gitlabService, aiService, wsHub)
 
 	api := router.Group("/api/v1")
 	{

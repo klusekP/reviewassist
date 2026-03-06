@@ -74,6 +74,7 @@ func NewAIService() *AIService {
 }
 
 func (a *AIService) ReviewCode(diffs []Diff, mrTitle, mrDescription string) (*CodeReview, error) {
+	logrus.Infof("[AI] ReviewCode: %d diffs, building prompt...", len(diffs))
 	if a.aiProvider == nil {
 		return a.createFallbackReview(diffs), fmt.Errorf("AI provider is not configured")
 	}

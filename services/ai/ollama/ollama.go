@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"codereviewAI/services/ai"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Service struct {
@@ -51,6 +53,8 @@ func NewService(model string) (*Service, error) {
 }
 
 func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, error) {
+	logrus.Infof("[Ollama] Sending review request to %s/api/chat (model: %s, prompt ~%d chars)", s.baseURL, s.model, len(prompt))
+
 	requestBody := OllamaRequest{
 		Model:  s.model,
 		Stream: false,
@@ -83,9 +87,12 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		logrus.Errorf("[Ollama] Request failed: %v", err)
 		return nil, fmt.Errorf("error calling Ollama API: %v", err)
 	}
 	defer resp.Body.Close()
+
+	logrus.Infof("[Ollama] Response received: HTTP %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -98,6 +105,7 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 	}
 
 	content := ollamaResp.Message.Content
+	logrus.Infof("[Ollama] Parsing response (~%d chars)", len(content))
 	return parseReviewResponse(content)
 }
 
