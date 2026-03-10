@@ -3,6 +3,9 @@ package services
 import (
 	"net/http"
 	"strconv"
+	"sync"
+
+	"codereviewAI/services/ai"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -102,25 +105,108 @@ func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 		return
 	}
 
+	totalFiles := len(diffs)
+	if totalFiles > 10 {
+		totalFiles = 10
+	}
+
 	// Return 202 immediately, run review in background
 	c.JSON(http.StatusAccepted, gin.H{
-		"status":   "started",
-		"message":  "Review started. Results will be delivered via WebSocket.",
-		"mr_id":    iid,
-		"mr_title": mr.Title,
+		"status":       "started",
+		"message":      "Review started. Results will be delivered via WebSocket.",
+		"mr_id":        iid,
+		"mr_title":     mr.Title,
+		"total_files":  totalFiles,
 	})
 
-	// Run AI review in background and broadcast result via WebSocket
 	go func() {
-		review, err := r.aiService.ReviewCode(diffs, mr.Title, mr.Description)
-		if err != nil {
-			logrus.Errorf("Error performing AI review for MR %d: %v", iid, err)
-			r.wsHub.BroadcastReviewError(iid, err.Error())
-			return
-		}
-		r.wsHub.BroadcastReview(iid, review)
-		logrus.Infof("[Review] MR %d review completed, sent via WebSocket", iid)
+		r.runPerFileReview(iid, diffs, mr.Title, mr.Description)
 	}()
+}
+
+func (r *ReviewService) runPerFileReview(iid int, diffs []Diff, mrTitle, mrDescription string) {
+	if len(diffs) == 0 {
+		r.wsHub.BroadcastReview(iid, r.aiService.createFallbackReview(diffs))
+		return
+	}
+
+	totalFiles := len(diffs)
+	if totalFiles > 10 {
+		diffs = diffs[:10]
+		totalFiles = 10
+		logrus.Infof("[Review] MR %d: limiting to first 10 files", iid)
+	}
+
+	const maxConcurrent = 2
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	results := make([]*ai.CodeReview, totalFiles)
+	var resultsMu sync.Mutex
+
+	for i, diff := range diffs {
+		wg.Add(1)
+		go func(idx int, d Diff) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			review, err := r.aiService.ReviewSingleDiff(d, mrTitle, mrDescription)
+			if err != nil {
+				logrus.Warnf("[Review] MR %d file %s: %v", iid, d.NewPath, err)
+				review = r.aiService.createFallbackReview([]Diff{d})
+			}
+			resultsMu.Lock()
+			results[idx] = review
+			resultsMu.Unlock()
+			r.wsHub.BroadcastReviewPart(iid, d.NewPath, idx, totalFiles, review)
+		}(i, diff)
+	}
+
+	wg.Wait()
+	aggregated := aggregateReviews(results)
+	r.wsHub.BroadcastReview(iid, aggregated)
+	logrus.Infof("[Review] MR %d review completed (%d files), sent via WebSocket", iid, totalFiles)
+}
+
+func aggregateReviews(reviews []*ai.CodeReview) *ai.CodeReview {
+	if len(reviews) == 0 {
+		return &ai.CodeReview{Summary: "No files to review", Issues: nil, Suggestions: nil, Score: 5}
+	}
+	var allIssues []ai.Issue
+	var allSuggestions []string
+	scoreSum := 0
+	for _, r := range reviews {
+		if r != nil {
+			allIssues = append(allIssues, r.Issues...)
+			allSuggestions = append(allSuggestions, r.Suggestions...)
+			scoreSum += r.Score
+		}
+	}
+	avgScore := scoreSum / len(reviews)
+	if avgScore > 10 {
+		avgScore = 10
+	}
+	if avgScore == 0 {
+		avgScore = 5
+	}
+	return &ai.CodeReview{
+		Summary:     "Review completed for " + strconv.Itoa(len(reviews)) + " files",
+		Issues:      allIssues,
+		Suggestions: dedupeStrings(allSuggestions),
+		Score:       avgScore,
+	}
+}
+
+func dedupeStrings(s []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, v := range s {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func (r *ReviewService) GetProjects(c *gin.Context) {

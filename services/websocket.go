@@ -17,16 +17,20 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	MessageTypeReview = "review"
-	MessageTypeError  = "review_error"
+	MessageTypeReview     = "review"
+	MessageTypeReviewPart = "review_part"
+	MessageTypeError      = "review_error"
 )
 
 type WSMessage struct {
-	Type    string      `json:"type"`
-	MrID    int         `json:"mr_id,omitempty"`
-	Review  interface{} `json:"review,omitempty"`
-	Error   string      `json:"error,omitempty"`
-	Message string      `json:"message,omitempty"`
+	Type       string      `json:"type"`
+	MrID       int         `json:"mr_id,omitempty"`
+	Review     interface{} `json:"review,omitempty"`
+	File       string      `json:"file,omitempty"`
+	FileIndex  int         `json:"file_index,omitempty"`
+	TotalFiles int         `json:"total_files,omitempty"`
+	Error      string      `json:"error,omitempty"`
+	Message    string      `json:"message,omitempty"`
 }
 
 type WSHub struct {
@@ -74,6 +78,24 @@ func (h *WSHub) Run() {
 			h.mu.RUnlock()
 		}
 	}
+}
+
+func (h *WSHub) BroadcastReviewPart(mrID int, file string, fileIndex, totalFiles int, review interface{}) {
+	msg := WSMessage{
+		Type:       MessageTypeReviewPart,
+		MrID:       mrID,
+		File:       file,
+		FileIndex:  fileIndex,
+		TotalFiles: totalFiles,
+		Review:     review,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		logrus.Errorf("[WS] Marshal error: %v", err)
+		return
+	}
+	h.broadcast <- data
+	logrus.Infof("[WS] Broadcast review part for MR %d file %s (%d/%d)", mrID, file, fileIndex+1, totalFiles)
 }
 
 func (h *WSHub) BroadcastReview(mrID int, review interface{}) {

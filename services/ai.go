@@ -11,6 +11,7 @@ import (
 	aiKimi "codereviewAI/services/ai/kimi"
 	aiOllama "codereviewAI/services/ai/ollama"
 	aiOpenAI "codereviewAI/services/ai/openai"
+	aiOpenCode "codereviewAI/services/ai/opencode"
 
 	"github.com/sirupsen/logrus"
 )
@@ -55,6 +56,14 @@ func NewAIService() *AIService {
 		aiProvider, err = aiOllama.NewService(ollamaModel)
 		if err != nil {
 			logrus.Errorf("Failed to create Ollama service: %v", err)
+			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
+		}
+	case "opencode":
+		opencodeAPIKey := os.Getenv("OPENCODE_API_KEY")
+		aiProvider, err = aiOpenCode.NewService(opencodeAPIKey)
+		if err != nil {
+			logrus.Errorf("Failed to create OpenCode service: %v", err)
 			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
 		}
@@ -160,6 +169,80 @@ Code changes:
 	}
 
 	return review, nil
+}
+
+func (a *AIService) ReviewSingleDiff(diff Diff, mrTitle, mrDescription string) (*CodeReview, error) {
+	if a.aiProvider == nil {
+		return a.createFallbackReview([]Diff{diff}), fmt.Errorf("AI provider is not configured")
+	}
+
+	contextStr := a.buildContextForSingleDiff(diff)
+	if len(contextStr) > 4000 {
+		contextStr = contextStr[:4000] + "\n\n[Diff truncated]"
+	}
+
+	prompt := `You are an experienced senior software architect and code reviewer. Analyze this single file change and perform a focused code review.
+
+Review guidelines: correctness, security, performance, best practices, error handling, SOLID, DRY, KISS, refactoring opportunities.
+
+Respond ONLY in JSON format:
+{
+  "summary": "Brief summary for this file",
+  "issues": [
+    {
+      "type": "bug|security|performance|style|best_practice|refactoring",
+      "severity": "low|medium|high|critical",
+      "description": "Problem description",
+      "file": "` + diff.NewPath + `",
+      "line": line_number,
+      "code": "code snippet",
+      "fix": "Suggested fix"
+    }
+  ],
+  "suggestions": ["suggestions for this file"],
+  "score": 1-10
+}
+
+MR Title: ` + mrTitle + `
+MR Description: ` + mrDescription + `
+
+File: ` + diff.NewPath + `
+` + a.diffFileTypeLabel(diff) + `
+Diff:
+` + contextStr
+
+	review, err := a.aiProvider.Review(context.Background(), prompt)
+	if err != nil {
+		logrus.Warnf("Failed to review file %s: %v", diff.NewPath, err)
+		return a.createFallbackReview([]Diff{diff}), nil
+	}
+	for i := range review.Issues {
+		if review.Issues[i].File == "" {
+			review.Issues[i].File = diff.NewPath
+		}
+	}
+	return review, nil
+}
+
+func (a *AIService) diffFileTypeLabel(diff Diff) string {
+	if diff.NewFile {
+		return "(NEW FILE)\n"
+	}
+	if diff.DeletedFile {
+		return "(DELETED FILE)\n"
+	}
+	if diff.RenamedFile {
+		return "(RENAMED FROM: " + diff.OldPath + ")\n"
+	}
+	return ""
+}
+
+func (a *AIService) buildContextForSingleDiff(diff Diff) string {
+	diffContent := diff.Diff
+	if len(diffContent) > 3500 {
+		diffContent = diffContent[:3500] + "\n\n[Truncated...]"
+	}
+	return diffContent
 }
 
 func (a *AIService) buildContext(diffs []Diff, mrTitle, mrDescription string) string {

@@ -5,13 +5,13 @@ import (
 )
 
 type Issue struct {
-	Type        string `json:"type"`
-	Severity    string `json:"severity"`
-	Description string `json:"description"`
-	File        string `json:"file"`
-	Line        int    `json:"line"`
-	Code        string `json:"code"`
-	Fix         string `json:"fix"`
+	Type        string      `json:"type"`
+	Severity    string      `json:"severity"`
+	Description string      `json:"description"`
+	File        string      `json:"file"`
+	Line        interface{} `json:"line"`
+	Code        string      `json:"code"`
+	Fix         string      `json:"fix"`
 }
 
 type CodeReview struct {

@@ -889,6 +889,7 @@
                   <div class="branch" x-text="mr.source_branch + ' → ' + mr.target_branch"></div>
         </div>
                 <div x-show="mr.reviewed" class="review-status status-reviewed" x-text="'✓ Reviewed (' + formatDate(mr.reviewedAt) + ')'"></div>
+                <div x-show="mr.reviewing && mr.reviewProgress" class="review-status status-pending" style="margin-bottom: 8px;" x-text="'Reviewing: ' + (mr.reviewProgress.done || 0) + '/' + (mr.reviewProgress.total || 0) + ' files'"></div>
                 <div class="mr-actions">
                   <button class="btn btn-success" @click="reviewMR(mr)" :disabled="mr.reviewed || mr.reviewing">
                     <span x-show="!mr.reviewing" x-text="mr.reviewed ? 'Reviewed' : 'AI Review'"></span>
@@ -998,14 +999,26 @@
                   mr.reviewResult = this.createReviewResultHTML(msg.review);
                   mr.showReview = true;
                   mr.reviewing = false;
+                  mr.reviewProgress = null;
                   this.saveReviewResult(msg.mr_id, msg.review);
                   this.scheduleStatsUpdate();
-                  this.showSnackbar('Review completed', `MR #${msg.mr_id} has been analyzed by AI`, 'success');
+                  const issueCount = (msg.review.issues || []).length;
+                  this.showSnackbar('Review completed', `MR #${msg.mr_id} analyzed - ${issueCount} issue${issueCount !== 1 ? 's' : ''} found`, 'success');
                   if (typeof Prism !== 'undefined') setTimeout(() => Prism.highlightAll(), 100);
+                }
+              } else if (msg.type === 'review_part' && msg.mr_id != null) {
+                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
+                if (mr) {
+                  mr.reviewProgress = mr.reviewProgress || { done: 0, total: msg.total_files || 1 };
+                  mr.reviewProgress.done = (mr.reviewProgress.done || 0) + 1;
+                  mr.reviewProgress.total = msg.total_files || mr.reviewProgress.total;
                 }
               } else if (msg.type === 'review_error' && msg.mr_id != null) {
                 const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
-                if (mr) mr.reviewing = false;
+                if (mr) {
+                  mr.reviewing = false;
+                  mr.reviewProgress = null;
+                }
                 this.showSnackbar('Review error', msg.message || msg.error || 'AI review failed', 'error');
               }
             } catch (err) {
@@ -1042,6 +1055,7 @@
                   reviewing: false,
                   reviewedAt: null,
                   reviewResult: savedState.reviewResult || '',
+                  reviewProgress: null,
                   showDetails: savedState.showDetails || false,
                   detailsResult: savedState.detailsResult || '',
                   showReview: savedState.showReview || false,
@@ -1128,7 +1142,8 @@
               const data = await response.json();
               
               if (response.status === 202) {
-                this.showSnackbar('Review started', `MR #${mr.iid} - AI is analyzing, results will appear when ready`, 'info', 4000);
+                mr.reviewProgress = { done: 0, total: data.total_files || 1 };
+                this.showSnackbar('Review started', `MR #${mr.iid} - analyzing ${data.total_files || '?'} files in parallel`, 'info', 4000);
               } else {
                 mr.reviewed = true;
                 mr.reviewedAt = new Date().toISOString();
