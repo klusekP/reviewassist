@@ -167,6 +167,19 @@ Open `http://localhost:$PORT`. The layout is inspired by [Cezar](https://github.
 
 Which projects appear: `GITLAB_PROJECTS` (IDs or paths), or all projects the token user is a member of (`GITLAB_PROJECTS_LIMIT`). Open MRs are counted with one group-level request per top-level group, and the result is cached for 5 minutes (the refresh button bypasses the cache).
 
+## Settings and database (SQLite)
+
+All settings from `.env` can be changed in the web interface (**gear icon → Ustawienia**), grouped by GitLab, Jira, Review, Claude Code agent, LLM models, context limits and server.
+
+- Values saved in the UI are stored in SQLite (`DB_PATH`, default `data/codereview.db`) and **override `.env`**. Each field shows where its value comes from (`UI`, `.env` or default). "Przywróć z .env" removes the UI override.
+- Changes apply immediately without a restart: GitLab, Jira, the AI provider and the review settings are rebuilt, and reviews in progress keep running. Only `PORT` needs a restart.
+- Tokens are never sent back to the browser. The UI shows only the last 4 characters; leave the field empty to keep the current token.
+- The GitLab, Jira and Claude Code groups have a **Testuj połączenie** button that checks the saved settings.
+- The same database stores **review results and their history**. They no longer live in the browser's `localStorage`, so they are visible from any computer. Results kept in the browser by older versions are moved into the database automatically on first launch.
+- The database file holds tokens entered in the UI. It is created with `0600` permissions and `data/` is in `.gitignore`. In Docker it is mounted as a volume (`./data`).
+
+`DB_PATH` is the only setting that can't be changed in the UI, because the app needs it to find the database.
+
 ## API Endpoints
 
 ### Health Check
@@ -200,6 +213,21 @@ GET /api/v1/merge-requests?state=opened
 ### Merge Request Details
 ```http
 GET /api/v1/merge-requests/{id}
+```
+
+### Settings
+```http
+GET  /api/v1/settings                      # secrets masked
+PUT  /api/v1/settings                      # {"values": {"KEY": "value"}, "reset": ["KEY"]}
+POST /api/v1/settings/test/{gitlab|jira|claude}
+```
+
+### Stored reviews
+```http
+GET    /api/v1/reviews[?project_id=]                         # latest review per MR
+GET    /api/v1/projects/{pid}/merge-requests/{iid}/reviews   # history
+DELETE /api/v1/projects/{pid}/merge-requests/{iid}/reviews
+POST   /api/v1/reviews/import                                # move browser results into the DB
 ```
 
 ### Automatic review (local)
