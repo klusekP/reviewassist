@@ -33,6 +33,8 @@
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
 </svg>
 
@@ -48,6 +50,7 @@
     <div class="side-actions">
       <button class="btn-primary-wide" @click="go('#/')"><svg class="icon"><use href="#i-dashboard"/></svg>Przegląd</button>
       <button class="btn-square" title="Odśwież projekty" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button class="btn-square" :class="{ active: route.view === 'settings' }" title="Ustawienia" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
     </div>
 
     <div class="side-scroll">
@@ -62,7 +65,7 @@
         </div>
       </template>
       <template x-if="projectsError">
-        <div class="tree-empty" style="color: var(--red)" x-text="'Błąd: ' + projectsError"></div>
+        <div class="tree-empty"><span style="color: var(--red)" x-text="'Błąd: ' + projectsError"></span><br /><a href="#/settings" style="text-decoration: underline">Sprawdź ustawienia GitLab</a></div>
       </template>
 
       <template x-for="p in visibleTreeProjects" :key="p.id">
@@ -136,7 +139,8 @@
         </span>
         <span class="pill-outline" x-show="config.jira_enabled" title="Zadania z Jiry są używane w review">jira</span>
         <span class="pill-outline" x-text="config.language || 'pl'"></span>
-        <button class="icon-btn ml-auto" @click="toggleTheme()" :title="theme === 'dark' ? 'Jasny motyw' : 'Ciemny motyw'">
+        <button class="icon-btn ml-auto" @click="go('#/settings')" title="Ustawienia"><svg class="icon"><use href="#i-gear"/></svg></button>
+        <button class="icon-btn" @click="toggleTheme()" :title="theme === 'dark' ? 'Jasny motyw' : 'Ciemny motyw'">
           <svg class="icon"><use :href="theme === 'dark' ? '#i-moon' : '#i-sun'"/></svg>
         </button>
       </div>
@@ -185,7 +189,10 @@
               </tbody>
             </table>
             <template x-if="!projectsLoading && !projects.length && !projectsError">
-              <div class="empty"><h3>Brak projektów</h3>Token GitLab nie ma dostępu do żadnego projektu albo GITLAB_PROJECTS jest pusty.</div>
+              <div class="empty"><h3>Brak projektów</h3>Token GitLab nie ma dostępu do żadnego projektu albo lista projektów jest pusta.<br /><a class="btn-primary" href="#/settings">Otwórz ustawienia</a></div>
+            </template>
+            <template x-if="projectsError">
+              <div class="empty"><h3>Nie udało się połączyć z GitLab</h3><span x-text="projectsError"></span><br /><a class="btn-primary" href="#/settings">Skonfiguruj GitLab</a></div>
             </template>
           </div>
 
@@ -333,7 +340,7 @@
                     <span x-text="currentRunning ? 'Analiza…' : (currentReview ? 'Ponów review' : 'Uruchom review')"></span>
                   </button>
                   <a class="btn-outline" :href="detail.mr.web_url" target="_blank" rel="noopener"><svg class="icon icon-sm"><use href="#i-external"/></svg>GitLab</a>
-                  <button class="btn-ghost danger" x-show="currentReview && !currentRunning" @click="clearReview(detail.pid, detail.iid)" title="Usuń wynik z tej przeglądarki"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+                  <button class="btn-ghost danger" x-show="currentReview && !currentRunning" @click="clearReview(detail.pid, detail.iid)" title="Usuń zapisane wyniki review tego MR z bazy"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
                 </div>
               </div>
 
@@ -379,7 +386,9 @@
                           <div class="v-sub">
                             <span x-text="'Review z ' + fullDate(currentReview.timestamp)"></span>
                             <span x-show="reqSummary(currentReview.requirements)" x-text="' · wymagania: ' + reqSummary(currentReview.requirements)"></span>
-                            <span x-show="status(detail.pid, detail.mr).outdated" class="del"> · od tego czasu pojawiły się nowe commity</span>
+                            <span x-show="currentReview.engine" x-text="' · ' + currentReview.engine"></span>
+                            <span x-show="!viewingOldReview && status(detail.pid, detail.mr).outdated" class="del"> · od tego czasu pojawiły się nowe commity</span>
+                            <span x-show="viewingOldReview" class="del"> · starsza wersja – <a href="#" @click.prevent="historyPick = null" style="text-decoration: underline">pokaż najnowszą</a></span>
                           </div>
                         </div>
                         <div class="score"><b x-text="currentReview.score || '—'"></b><span>/10</span></div>
@@ -434,6 +443,23 @@
                           <template x-for="(i, idx) in g.issues" :key="idx">
                             <div @click="gotoIssue(i)" :style="i.file && i.line ? 'cursor: pointer' : ''" :title="i.file && i.line ? 'Pokaż w zmianach' : ''" x-html="issueCardHTML(i, true)"></div>
                           </template>
+                        </div>
+                      </template>
+
+                      <template x-if="history.length > 1">
+                        <div class="card" style="margin-top: 8px">
+                          <h3><svg class="icon icon-sm"><use href="#i-history"/></svg>Historia review <span class="faint" x-text="'· ' + history.length"></span></h3>
+                          <div class="history">
+                            <template x-for="(h, hi) in history" :key="h.id">
+                              <button class="history-item" :class="{ on: (historyPick || history[0].id) === h.id }" @click="historyPick = hi === 0 ? null : h.id; issueFilter = 'all'">
+                                <span class="dot" :class="verdict(h.verdict)?.dot || 'blue'"></span>
+                                <span x-text="verdict(h.verdict)?.short || 'sprawdzony'"></span>
+                                <span class="mono faint" x-text="(h.score || '—') + '/10'"></span>
+                                <span class="faint" x-text="fullDate(h.timestamp)"></span>
+                                <span class="mono faint ml-auto" x-text="(h.sha || '').slice(0, 8)"></span>
+                              </button>
+                            </template>
+                          </div>
                         </div>
                       </template>
 
@@ -514,6 +540,96 @@
             </div>
           </div>
         </template>
+      </div>
+    </template>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <template x-if="route.view === 'settings'">
+      <div style="display: contents">
+        <div class="page-head">
+          <div style="min-width: 0">
+            <div class="page-title">Ustawienia</div>
+            <div class="faint" style="font-size: 12.5px" x-show="settings.dbPath">Zapisywane w SQLite: <span class="mono" x-text="settings.dbPath"></span> · nadpisują wartości z .env</div>
+          </div>
+          <div class="head-actions">
+            <button class="btn-ghost" x-show="dirtyCount" @click="discardSettings()">Odrzuć</button>
+            <button class="btn-primary" :disabled="!dirtyCount || settings.saving" @click="saveSettings()">
+              <template x-if="settings.saving"><span class="spinner" style="border-top-color: var(--primary-text)"></span></template>
+              <span x-text="dirtyCount ? 'Zapisz zmiany (' + dirtyCount + ')' : 'Zapisano'"></span>
+            </button>
+          </div>
+        </div>
+        <div class="content">
+          <template x-if="settings.loading && !settings.items.length"><div class="skeleton" style="width: 50%"></div></template>
+          <template x-if="settings.error"><div class="card"><div class="empty"><h3>Nie udało się wczytać ustawień</h3><span x-text="settings.error"></span></div></div></template>
+          <div class="settings-layout" x-show="settings.items.length">
+            <nav class="settings-nav">
+              <template x-for="g in settings.groups" :key="g.id">
+                <button @click="scrollToGroup(g.id)">
+                  <span x-text="g.label"></span>
+                  <span class="dot purple" x-show="groupItems(g.id).some(s => isDirty(s))" title="Niezapisane zmiany"></span>
+                </button>
+              </template>
+            </nav>
+            <div style="min-width: 0">
+              <template x-for="g in settings.groups" :key="g.id">
+                <section class="card settings-group" :id="'sg-' + g.id">
+                  <div class="sg-head">
+                    <div style="min-width: 0">
+                      <h3 x-text="g.label"></h3>
+                      <div class="faint" style="font-size: 12.5px" x-text="g.description"></div>
+                    </div>
+                    <template x-if="g.test">
+                      <div class="sg-test">
+                        <span class="test-result" x-show="tests[g.test] && !tests[g.test].loading" :class="tests[g.test]?.ok ? 'add' : 'del'" x-text="tests[g.test]?.message"></span>
+                        <button class="btn-outline" @click="testConnection(g.test)" :disabled="tests[g.test]?.loading">
+                          <template x-if="tests[g.test]?.loading"><span class="spinner"></span></template>
+                          Testuj połączenie
+                        </button>
+                      </div>
+                    </template>
+                  </div>
+                  <template x-for="s in groupItems(g.id)" :key="s.key">
+                    <div class="setting-row" :class="{ dirty: isDirty(s) }">
+                      <div class="setting-label">
+                        <div class="sl-top">
+                          <span x-text="s.label"></span>
+                          <span class="src" :class="resets[s.key] ? 'reset' : s.source" x-text="sourceLabel(s)"></span>
+                          <span class="chip warn" x-show="s.restart">restart</span>
+                        </div>
+                        <div class="mono faint sl-key" x-text="s.key"></div>
+                        <div class="sl-desc" x-show="s.description" x-text="s.description"></div>
+                      </div>
+                      <div class="setting-input">
+                        <template x-if="s.type === 'bool'">
+                          <button class="switch" :class="{ on: fieldValue(s) === 'true' }" @click="toggleField(s)" role="switch" :aria-checked="fieldValue(s) === 'true'"><i></i></button>
+                        </template>
+                        <template x-if="s.type === 'select'">
+                          <select class="input" :value="fieldValue(s)" @change="setField(s, $event.target.value)">
+                            <template x-for="o in s.options" :key="o"><option :value="o" x-text="o" :selected="o === fieldValue(s)"></option></template>
+                          </select>
+                        </template>
+                        <template x-if="s.type === 'secret'">
+                          <input class="input mono" type="password" autocomplete="new-password" :value="fieldValue(s)" :placeholder="secretPlaceholder(s)" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <template x-if="s.type === 'int'">
+                          <input class="input mono" type="number" min="0" :value="fieldValue(s)" :placeholder="s.default" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <template x-if="s.type === 'string' || s.type === 'list'">
+                          <input class="input" :class="{ mono: s.type === 'list' || s.key.endsWith('_URL') || s.key.endsWith('PATTERN') }" type="text" :value="fieldValue(s)" :placeholder="s.placeholder || s.default" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <div class="setting-actions">
+                          <button class="link" x-show="isDirty(s)" @click="undoField(s)">cofnij</button>
+                          <button class="link" x-show="s.source === 'ui' && !resets[s.key]" @click="resetField(s)" x-text="s.env_set ? 'przywróć z .env' : 'przywróć domyślne'"></button>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </section>
+              </template>
+            </div>
+          </div>
+        </div>
       </div>
     </template>
   </main>

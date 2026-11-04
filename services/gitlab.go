@@ -78,7 +78,7 @@ type Project struct {
 	rootGroup string // top-level group path, empty for personal namespaces
 }
 
-func NewGitLabService() *GitLabService {
+func NewGitLabService() (*GitLabService, error) {
 	token := os.Getenv("GITLAB_TOKEN")
 	gitlabURL := os.Getenv("GITLAB_URL")
 
@@ -86,16 +86,19 @@ func NewGitLabService() *GitLabService {
 		gitlabURL = "https://gitlab.com"
 	}
 
+	if token == "" {
+		logrus.Warn("[GitLab] GITLAB_TOKEN is empty - set it in Settings")
+	}
 	client, err := gitlab.NewClient(token, gitlab.WithBaseURL(gitlabURL))
 	if err != nil {
-		logrus.Fatalf("Error creating GitLab client: %v", err)
+		return nil, fmt.Errorf("error creating GitLab client: %v", err)
 	}
 
 	// GITLAB_PROJECT_ID is optional now: it is the default project for the legacy /merge-requests routes.
 	projectID := 0
 	if s := strings.TrimSpace(os.Getenv("GITLAB_PROJECT_ID")); s != "" {
 		if projectID, err = strconv.Atoi(s); err != nil {
-			logrus.Fatalf("Invalid GITLAB_PROJECT_ID: %v", err)
+			return nil, fmt.Errorf("invalid GITLAB_PROJECT_ID: %v", err)
 		}
 	}
 
@@ -104,7 +107,16 @@ func NewGitLabService() *GitLabService {
 		projectID: projectID,
 		baseURL:   strings.TrimRight(gitlabURL, "/"),
 		projects:  &projectCache{},
+	}, nil
+}
+
+// CurrentUser returns the username of the token owner (connection test).
+func (g *GitLabService) CurrentUser() (string, error) {
+	u, _, err := g.client.Users.CurrentUser()
+	if err != nil {
+		return "", err
 	}
+	return u.Username + " (" + u.Name + ")", nil
 }
 
 // ForProject returns a copy of the service bound to another project.

@@ -23,14 +23,23 @@ type ReviewService struct {
 	config        *ReviewConfig
 	repo          *RepoManager // used by the claude-code engine, bound to the same project
 	shared        *reviewShared
+	running       *runningState // survives settings reloads
+	store         *Store
 }
 
 // reviewShared is state common to all project-scoped copies of ReviewService.
 type reviewShared struct {
-	mu      sync.Mutex
-	repos   map[int]*RepoManager
-	running map[string]*ReviewProgress // "projectID/iid" -> progress
+	mu    sync.Mutex
+	repos map[int]*RepoManager
 }
+
+// runningState tracks reviews in progress; shared across settings reloads.
+type runningState struct {
+	mu sync.Mutex
+	m  map[string]*ReviewProgress // "projectID/iid" -> progress
+}
+
+func newRunningState() *runningState { return &runningState{m: map[string]*ReviewProgress{}} }
 
 // ReviewProgress describes a review that is currently running on the server.
 type ReviewProgress struct {
@@ -42,7 +51,7 @@ type ReviewProgress struct {
 	Engine    string `json:"engine"`
 }
 
-func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub) *ReviewService {
+func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub, store *Store, running *runningState) *ReviewService {
 	cfg := LoadReviewConfig()
 	switch cfg.Engine {
 	case "claude-code":
@@ -65,7 +74,9 @@ func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub 
 		wsHub:         wsHub,
 		jira:          NewJiraService(),
 		config:        cfg,
-		shared:        &reviewShared{repos: map[int]*RepoManager{}, running: map[string]*ReviewProgress{}},
+		shared:        &reviewShared{repos: map[int]*RepoManager{}},
+		running:       running,
+		store:         store,
 	}
 	return r.forProject(gitlabService.ProjectID())
 }
@@ -117,35 +128,35 @@ func (r *ReviewService) scoped(c *gin.Context, needIID bool) (*ReviewService, in
 func runningKey(pid, iid int) string { return fmt.Sprintf("%d/%d", pid, iid) }
 
 func (r *ReviewService) startRunning(iid, total int) bool {
-	r.shared.mu.Lock()
-	defer r.shared.mu.Unlock()
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
 	key := runningKey(r.pid(), iid)
-	if _, busy := r.shared.running[key]; busy {
+	if _, busy := r.running.m[key]; busy {
 		return false
 	}
-	r.shared.running[key] = &ReviewProgress{ProjectID: r.pid(), IID: iid, StartedAt: time.Now().UTC().Format(time.RFC3339), Total: total, Engine: r.config.Engine}
+	r.running.m[key] = &ReviewProgress{ProjectID: r.pid(), IID: iid, StartedAt: time.Now().UTC().Format(time.RFC3339), Total: total, Engine: r.config.Engine}
 	return true
 }
 
 func (r *ReviewService) progressRunning(iid int) {
-	r.shared.mu.Lock()
-	defer r.shared.mu.Unlock()
-	if p, ok := r.shared.running[runningKey(r.pid(), iid)]; ok {
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	if p, ok := r.running.m[runningKey(r.pid(), iid)]; ok {
 		p.Done++
 	}
 }
 
 func (r *ReviewService) stopRunning(iid int) {
-	r.shared.mu.Lock()
-	defer r.shared.mu.Unlock()
-	delete(r.shared.running, runningKey(r.pid(), iid))
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	delete(r.running.m, runningKey(r.pid(), iid))
 }
 
 func (r *ReviewService) runningFor(pid int) map[int]ReviewProgress {
-	r.shared.mu.Lock()
-	defer r.shared.mu.Unlock()
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
 	out := map[int]ReviewProgress{}
-	for _, p := range r.shared.running {
+	for _, p := range r.running.m {
 		if p.ProjectID == pid {
 			out[p.IID] = *p
 		}
@@ -265,6 +276,7 @@ func (r *ReviewService) GetConfig(c *gin.Context) {
 		"post_to_gitlab":     r.config.PostToGitLab,
 		"gitlab_mode":        r.config.GitLabMode,
 		"jira_enabled":       r.jira != nil,
+		"db_path":            r.store.Path(),
 	})
 }
 
@@ -396,6 +408,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		}
 	}
 
+	r.saveReview(mr, aggregated)
 	r.wsHub.BroadcastReview(r.pid(), iid, aggregated)
 	logrus.Infof("[Review] MR %d review completed (%d files)", iid, total)
 }

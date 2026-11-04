@@ -75,7 +75,13 @@ function app() {
     expanded: {},          // pid -> bool
     lists: {},             // "pid:state" -> { items, loading, error }
     running: {},           // "pid/iid" -> { done, total, started_at, engine, title }
-    reviews: {},           // "pid/iid" -> review + meta
+    reviews: {},           // "pid/iid" -> latest review + meta (from SQLite)
+    history: [],           // stored reviews of the open MR, newest first
+    historyPick: null,     // id of an older review being viewed
+    settings: { groups: [], items: [], loading: false, saving: false, error: '', dbPath: '' },
+    form: {},              // edited setting values (key -> value)
+    resets: {},            // keys to reset to .env/default
+    tests: {},             // connection test results per target
     errors: {},            // "pid/iid" -> last review error
     route: { view: 'dashboard', pid: null, iid: null, tab: 'review' },
     listState: 'opened',
@@ -96,8 +102,8 @@ function app() {
     async init() {
       this.theme = readJSON(LS_THEME, null) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       this.applyTheme();
-      this.reviews = readJSON(LS_REVIEWS, {});
       this.expanded = readJSON(LS_EXPANDED, {});
+      window.addEventListener('beforeunload', e => { if (this.dirtyCount) { e.preventDefault(); e.returnValue = ''; } });
       setInterval(() => { this.now = Date.now(); }, 1000);
       window.addEventListener('hashchange', () => this.applyRoute());
       window.addEventListener('keydown', e => {
@@ -106,7 +112,8 @@ function app() {
       });
       this.connectWS();
       try { this.config = await this.api('/api/v1/config'); } catch (e) { this.toast('Brak konfiguracji', e.message, 'red'); }
-      this.migrateLegacyReviews();
+      await this.loadReviews();
+      await this.migrateLocalReviews();
       await this.loadProjects();
       this.applyRoute();
       for (const pid of Object.keys(this.expanded)) if (this.expanded[pid]) this.ensureList(+pid, 'opened');
@@ -152,7 +159,8 @@ function app() {
         const meta = this.running[key] || {};
         delete this.running[key];
         delete this.errors[key];
-        this.saveReview(pid, msg.mr_id, msg.review, meta);
+        this.rememberReview(pid, msg.mr_id, msg.review, meta);
+        if (this.detail?.pid === +pid && this.detail?.iid === +msg.mr_id) { this.historyPick = null; this.loadHistory(pid, msg.mr_id); }
         const v = VERDICTS[msg.review.verdict];
         this.toast(`Review !${msg.mr_id} gotowe`, v ? `${v.icon} ${v.label}` : `${(msg.review.issues || []).length} uwag`, v?.dot || 'green');
       } else if (msg.type === 'review_error') {
@@ -203,7 +211,7 @@ function app() {
 
     async loadDetail(pid, iid) {
       const same = this.detail && this.detail.pid === pid && this.detail.iid === iid;
-      if (!same) { this.detail = null; this.issueFilter = 'all'; this.collapsed = {}; }
+      if (!same) { this.detail = null; this.issueFilter = 'all'; this.collapsed = {}; this.history = []; this.historyPick = null; this.loadHistory(pid, iid); }
       this.detailLoading = !same;
       this.detailError = '';
       try {
@@ -241,33 +249,71 @@ function app() {
       }
     },
 
-    // ---------- reviews (browser storage) ----------
-    saveReview(pid, iid, review, meta = {}) {
+    // ---------- reviews (SQLite on the server) ----------
+    fromRecord(rec) {
+      return { ...(rec.review || {}), id: rec.id, timestamp: rec.created_at, sha: rec.sha, title: rec.title, engine: rec.engine, pid: rec.project_id, iid: rec.iid };
+    },
+    async loadReviews() {
+      try {
+        const data = await this.api('/api/v1/reviews?limit=1000');
+        const map = {};
+        for (const rec of data.reviews || []) map[`${rec.project_id}/${rec.iid}`] = this.fromRecord(rec);
+        this.reviews = map;
+      } catch (e) {
+        this.toast('Nie udało się wczytać wyników review', e.message, 'red');
+      }
+    },
+    async loadHistory(pid, iid) {
+      try {
+        const data = await this.api(`/api/v1/projects/${pid}/merge-requests/${iid}/reviews`);
+        if (this.detail && (this.detail.pid !== +pid || this.detail.iid !== +iid) && this.route.iid !== +iid) return;
+        this.history = (data.reviews || []).map(r => this.fromRecord(r));
+      } catch { this.history = []; }
+    },
+    /** Keep a just-finished review in memory (the server has already stored it). */
+    rememberReview(pid, iid, review, meta = {}) {
       const mr = this.findMR(pid, iid);
       this.reviews[`${pid}/${iid}`] = {
         ...review,
         timestamp: new Date().toISOString(),
         sha: meta.sha || mr?.sha || '',
         title: mr?.title || meta.title || `!${iid}`,
+        engine: meta.engine || this.config.engine,
         pid: +pid, iid: +iid,
       };
-      writeJSON(LS_REVIEWS, this.reviews);
     },
-    clearReview(pid, iid) {
-      delete this.reviews[`${pid}/${iid}`];
-      delete this.errors[`${pid}/${iid}`];
-      writeJSON(LS_REVIEWS, this.reviews);
-      this.toast('Wynik usunięty', `Review !${iid} wyczyszczone lokalnie (komentarze w GitLab zostają)`, 'gray');
-    },
-    migrateLegacyReviews() {
-      const legacy = readJSON(LS_REVIEWS_LEGACY, null);
-      const pid = this.config.default_project_id;
-      if (!legacy || !pid) return;
-      for (const [iid, r] of Object.entries(legacy)) {
-        if (!this.reviews[`${pid}/${iid}`]) this.reviews[`${pid}/${iid}`] = { ...r, pid, iid: +iid, title: r.title || `!${iid}` };
+    async clearReview(pid, iid) {
+      if (!confirm(`Usunąć wszystkie zapisane wyniki review !${iid} z bazy? Komentarze w GitLab zostają.`)) return;
+      try {
+        await this.api(`/api/v1/projects/${pid}/merge-requests/${iid}/reviews`, { method: 'DELETE' });
+        delete this.reviews[`${pid}/${iid}`];
+        delete this.errors[`${pid}/${iid}`];
+        this.history = [];
+        this.historyPick = null;
+        this.toast('Wyniki usunięte', `Review !${iid} usunięte z bazy (komentarze w GitLab zostają)`, 'gray');
+      } catch (e) {
+        this.toast('Nie udało się usunąć', e.message, 'red');
       }
-      writeJSON(LS_REVIEWS, this.reviews);
-      try { localStorage.removeItem(LS_REVIEWS_LEGACY); } catch { /* ignore */ }
+    },
+    /** One-time move of results kept in the browser by older versions into SQLite. */
+    async migrateLocalReviews() {
+      const items = [];
+      const v2 = readJSON(LS_REVIEWS, null) || {};
+      for (const [key, r] of Object.entries(v2)) {
+        const [pid, iid] = key.split('/').map(Number);
+        items.push({ project_id: pid, iid, sha: r.sha || '', title: r.title || '', timestamp: r.timestamp, review: r });
+      }
+      const legacy = readJSON(LS_REVIEWS_LEGACY, null) || {};
+      const dpid = this.config.default_project_id;
+      if (dpid) for (const [iid, r] of Object.entries(legacy)) items.push({ project_id: dpid, iid: +iid, sha: '', title: r.title || '', timestamp: r.timestamp, review: r });
+      if (!items.length) return;
+      try {
+        const res = await this.api('/api/v1/reviews/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) });
+        try { localStorage.removeItem(LS_REVIEWS); localStorage.removeItem(LS_REVIEWS_LEGACY); } catch { /* ignore */ }
+        if (res.imported) { this.toast('Przeniesiono wyniki do bazy', `${res.imported} review z przeglądarki zapisano w SQLite`, 'green'); await this.loadReviews(); }
+      } catch (e) {
+        console.warn('Review import failed', e);
+      }
     },
     review(pid, iid) { return this.reviews[`${pid}/${iid}`] || null; },
     findMR(pid, iid) {
@@ -316,6 +362,9 @@ function app() {
           this.listQuery = '';
           this.ensureList(pid, this.listState);
         }
+      } else if (parts[0] === 'settings') {
+        this.route = { view: 'settings', pid: null, iid: null, tab: parts[1] || '' };
+        if (!this.settings.items.length) this.loadSettings();
       } else {
         this.route = { view: 'dashboard', pid: null, iid: null, tab: 'review' };
       }
@@ -381,7 +430,12 @@ function app() {
         .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
     },
     get totalOpen() { return this.projects.reduce((s, p) => s + (p.open_mrs || 0), 0); },
-    get currentReview() { return this.detail ? this.review(this.detail.pid, this.detail.iid) : null; },
+    get currentReview() {
+      if (!this.detail) return null;
+      if (this.historyPick) return this.history.find(h => h.id === this.historyPick) || null;
+      return this.review(this.detail.pid, this.detail.iid);
+    },
+    get viewingOldReview() { return !!this.historyPick && this.history[0]?.id !== this.historyPick; },
     get currentRunning() { return this.detail ? this.running[`${this.detail.pid}/${this.detail.iid}`] : null; },
     get currentError() { return this.detail ? this.errors[`${this.detail.pid}/${this.detail.iid}`] : null; },
     get filteredIssues() {
@@ -497,6 +551,82 @@ function app() {
       this.collapsed[fi] = false;
       document.getElementById(`f-${fi}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     },
+
+    // ---------- settings ----------
+    async loadSettings() {
+      this.settings.loading = true;
+      this.settings.error = '';
+      try {
+        const data = await this.api('/api/v1/settings');
+        this.applySettingsData(data);
+      } catch (e) {
+        this.settings.error = e.message;
+      } finally {
+        this.settings.loading = false;
+      }
+    },
+    applySettingsData(data) {
+      this.settings.groups = data.groups || [];
+      this.settings.items = data.settings || [];
+      this.settings.dbPath = data.db_path || '';
+      this.form = {};
+      this.resets = {};
+    },
+    groupItems(gid) { return this.settings.items.filter(s => s.group === gid); },
+    fieldValue(s) {
+      if (s.key in this.form) return this.form[s.key];
+      if (this.resets[s.key]) return s.type === 'secret' ? '' : (s.env_set ? s.env_value : s.default);
+      return s.type === 'secret' ? '' : s.value;
+    },
+    setField(s, v) {
+      if (s.type === 'secret' && v === '') { delete this.form[s.key]; return; }
+      if (s.type !== 'secret' && v === s.value) delete this.form[s.key];
+      else this.form[s.key] = v;
+      delete this.resets[s.key];
+    },
+    toggleField(s) { this.setField(s, (this.fieldValue(s) === 'true') ? 'false' : 'true'); },
+    resetField(s) { delete this.form[s.key]; this.resets[s.key] = true; },
+    undoField(s) { delete this.form[s.key]; delete this.resets[s.key]; },
+    isDirty(s) { return s.key in this.form || !!this.resets[s.key]; },
+    get dirtyCount() { return Object.keys(this.form).length + Object.keys(this.resets).length; },
+    sourceLabel(s) {
+      if (this.resets[s.key]) return s.env_set ? 'wróci do .env' : 'wróci do domyślnej';
+      return { ui: 'UI', env: '.env', default: 'domyślne' }[s.source] || s.source;
+    },
+    secretPlaceholder(s) { return s.is_set ? `ustawiony (${s.value}) – wpisz, aby zmienić` : 'nie ustawiono'; },
+    discardSettings() { this.form = {}; this.resets = {}; },
+    async saveSettings() {
+      if (!this.dirtyCount) return;
+      const changed = [...Object.keys(this.form), ...Object.keys(this.resets)];
+      this.settings.saving = true;
+      try {
+        const data = await this.api('/api/v1/settings', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: this.form, reset: Object.keys(this.resets) }),
+        });
+        this.applySettingsData(data);
+        this.tests = {};
+        this.config = await this.api('/api/v1/config');
+        if (data.restart_required?.length) this.toast('Zapisano – wymagany restart', `Zmiana ${data.restart_required.join(', ')} zadziała po ponownym uruchomieniu aplikacji.`, 'yellow', 9000);
+        else this.toast('Ustawienia zapisane', `Zastosowano od razu (${changed.length} zm.)`, 'green');
+        if (changed.some(k => k.startsWith('GITLAB_'))) { this.lists = {}; await this.loadProjects(true); }
+      } catch (e) {
+        this.toast('Nie zapisano ustawień', e.message, 'red', 9000);
+      } finally {
+        this.settings.saving = false;
+      }
+    },
+    async testConnection(target) {
+      if (this.dirtyCount) { this.toast('Najpierw zapisz zmiany', 'Test używa zapisanych ustawień.', 'yellow'); return; }
+      this.tests[target] = { loading: true };
+      try {
+        const res = await this.api(`/api/v1/settings/test/${target}`, { method: 'POST' });
+        this.tests[target] = { ok: res.ok, message: res.message };
+      } catch (e) {
+        this.tests[target] = { ok: false, message: e.message };
+      }
+    },
+    scrollToGroup(gid) { document.getElementById('sg-' + gid)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); },
 
     // ---------- toasts ----------
     toast(title, text, dot = 'green', ms = 5000) {
