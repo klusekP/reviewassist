@@ -156,12 +156,41 @@ The token needs the `api` scope. In `draft` mode the comments are created as the
 
 Review prompts with full context take roughly 10–20k tokens. For Ollama, `OLLAMA_NUM_CTX` (default 32768) sets the context window; Ollama's default is much smaller and would silently truncate the prompt. With small models, lower `REVIEW_*_MAX_CHARS`.
 
+## Web interface
+
+Open `http://localhost:$PORT`. The layout is inspired by [Cezar](https://github.com/open-mercato/cezar):
+
+- **Left sidebar**: a tree of your GitLab projects with the number of open MRs. Click a project to see its MR list; expand it (chevron) to see its MRs directly in the tree. Projects without open MRs are hidden behind "Pokaż projekty bez MR". The sidebar also shows reviews in progress and recent reviews. Search with `Ctrl+K`.
+- **Project view**: a table of MRs (open / merged / closed) with the AI review status, branches, author, score and finding counts.
+- **MR view**: the *Review* tab shows the verdict, summary, task requirements, security, quality and findings; click a finding to jump to the line in *Changes*. The *Changes* tab shows a unified diff with AI comments inline. The *Opis* tab shows the MR description and merge status. Action buttons: run or re-run the review, open the MR in GitLab, clear the local result.
+- Dark and light themes. Results are kept in browser `localStorage`. The server tracks running reviews, so the "analiza…" status survives a page reload.
+
+Which projects appear: `GITLAB_PROJECTS` (IDs or paths), or all projects the token user is a member of (`GITLAB_PROJECTS_LIMIT`). Open MRs are counted with one group-level request per top-level group, and the result is cached for 5 minutes (the refresh button bypasses the cache).
+
 ## API Endpoints
 
 ### Health Check
 ```http
 GET /api/v1/health
 ```
+
+### UI configuration
+```http
+GET /api/v1/config
+```
+
+### Projects (with open MR counts)
+```http
+GET /api/v1/projects[?refresh=1]
+```
+
+### Merge requests of a project
+```http
+GET  /api/v1/projects/{pid}/merge-requests?state=opened|merged|closed
+GET  /api/v1/projects/{pid}/merge-requests/{iid}
+POST /api/v1/projects/{pid}/merge-requests/{iid}/review
+```
+The legacy routes below use the default project (`GITLAB_PROJECT_ID`).
 
 ### List Merge Requests
 ```http
@@ -178,10 +207,6 @@ GET /api/v1/merge-requests/{id}
 POST /api/v1/merge-requests/{id}/review
 ```
 
-### List projects
-```http
-GET /api/v1/projects
-```
 
 ## Usage Example
 

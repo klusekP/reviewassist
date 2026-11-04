@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"codereviewAI/services/ai"
 
@@ -15,12 +16,30 @@ import (
 )
 
 type ReviewService struct {
-	gitlabService *GitLabService
+	gitlabService *GitLabService // bound to one project (see forProject)
 	aiService     *AIService
 	wsHub         *WSHub
 	jira          *JiraService // nil when Jira is not configured
 	config        *ReviewConfig
-	repo          *RepoManager // used by the claude-code engine
+	repo          *RepoManager // used by the claude-code engine, bound to the same project
+	shared        *reviewShared
+}
+
+// reviewShared is state common to all project-scoped copies of ReviewService.
+type reviewShared struct {
+	mu      sync.Mutex
+	repos   map[int]*RepoManager
+	running map[string]*ReviewProgress // "projectID/iid" -> progress
+}
+
+// ReviewProgress describes a review that is currently running on the server.
+type ReviewProgress struct {
+	ProjectID int    `json:"project_id"`
+	IID       int    `json:"iid"`
+	StartedAt string `json:"started_at"`
+	Done      int    `json:"done"`
+	Total     int    `json:"total"`
+	Engine    string `json:"engine"`
 }
 
 func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub) *ReviewService {
@@ -40,108 +59,213 @@ func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub 
 		logrus.Warnf("[Review] Unknown REVIEW_ENGINE=%q, using llm", cfg.Engine)
 		cfg.Engine = "llm"
 	}
-	return &ReviewService{
+	r := &ReviewService{
 		gitlabService: gitlabService,
 		aiService:     aiService,
 		wsHub:         wsHub,
 		jira:          NewJiraService(),
 		config:        cfg,
-		repo:          NewRepoManager(gitlabService, cfg.WorkDir),
+		shared:        &reviewShared{repos: map[int]*RepoManager{}, running: map[string]*ReviewProgress{}},
+	}
+	return r.forProject(gitlabService.ProjectID())
+}
+
+// forProject returns a copy of the service bound to the given GitLab project.
+func (r *ReviewService) forProject(projectID int) *ReviewService {
+	c := *r
+	c.gitlabService = r.gitlabService.ForProject(projectID)
+	r.shared.mu.Lock()
+	repo, ok := r.shared.repos[projectID]
+	if !ok {
+		repo = NewRepoManager(c.gitlabService, r.config.WorkDir)
+		r.shared.repos[projectID] = repo
+	}
+	r.shared.mu.Unlock()
+	c.repo = repo
+	return &c
+}
+
+func (r *ReviewService) pid() int { return r.gitlabService.ProjectID() }
+
+// scoped resolves the project from the :pid route param (or the default project) and the MR from :id.
+func (r *ReviewService) scoped(c *gin.Context, needIID bool) (*ReviewService, int, bool) {
+	pid := r.pid()
+	if s := c.Param("pid"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+			return nil, 0, false
+		}
+		pid = n
+	}
+	if pid == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No project selected (set GITLAB_PROJECT_ID or use /projects/:pid/...)"})
+		return nil, 0, false
+	}
+	iid := 0
+	if needIID {
+		n, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid merge request ID"})
+			return nil, 0, false
+		}
+		iid = n
+	}
+	return r.forProject(pid), iid, true
+}
+
+func runningKey(pid, iid int) string { return fmt.Sprintf("%d/%d", pid, iid) }
+
+func (r *ReviewService) startRunning(iid, total int) bool {
+	r.shared.mu.Lock()
+	defer r.shared.mu.Unlock()
+	key := runningKey(r.pid(), iid)
+	if _, busy := r.shared.running[key]; busy {
+		return false
+	}
+	r.shared.running[key] = &ReviewProgress{ProjectID: r.pid(), IID: iid, StartedAt: time.Now().UTC().Format(time.RFC3339), Total: total, Engine: r.config.Engine}
+	return true
+}
+
+func (r *ReviewService) progressRunning(iid int) {
+	r.shared.mu.Lock()
+	defer r.shared.mu.Unlock()
+	if p, ok := r.shared.running[runningKey(r.pid(), iid)]; ok {
+		p.Done++
 	}
 }
 
+func (r *ReviewService) stopRunning(iid int) {
+	r.shared.mu.Lock()
+	defer r.shared.mu.Unlock()
+	delete(r.shared.running, runningKey(r.pid(), iid))
+}
+
+func (r *ReviewService) runningFor(pid int) map[int]ReviewProgress {
+	r.shared.mu.Lock()
+	defer r.shared.mu.Unlock()
+	out := map[int]ReviewProgress{}
+	for _, p := range r.shared.running {
+		if p.ProjectID == pid {
+			out[p.IID] = *p
+		}
+	}
+	return out
+}
+
 func (r *ReviewService) GetMergeRequests(c *gin.Context) {
+	r, _, ok := r.scoped(c, false)
+	if !ok {
+		return
+	}
 	state := c.DefaultQuery("state", "opened")
 
 	mrs, err := r.gitlabService.GetMergeRequests(state)
 	if err != nil {
-		logrus.Errorf("Error fetching merge requests: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge requests",
-		})
+		logrus.Errorf("Error fetching merge requests of project %d: %v", r.pid(), err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge requests: " + err.Error()})
 		return
 	}
 
-	logrus.Infof("Fetched %d merge requests", len(mrs))
-
 	c.JSON(http.StatusOK, gin.H{
+		"project_id":     r.pid(),
 		"merge_requests": mrs,
 		"count":          len(mrs),
+		"running":        r.runningFor(r.pid()),
 	})
 }
 
 func (r *ReviewService) GetMergeRequest(c *gin.Context) {
-	iidStr := c.Param("id")
-	iid, err := strconv.Atoi(iidStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid merge request ID",
-		})
+	r, iid, ok := r.scoped(c, true)
+	if !ok {
 		return
 	}
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge request",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge request: " + err.Error()})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
+	}
+
+	var running *ReviewProgress
+	if p, ok := r.runningFor(r.pid())[iid]; ok {
+		running = &p
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"merge_request": mr,
 		"diffs":         diffs,
 		"diff_count":    len(diffs),
+		"running":       running,
 	})
 }
 
 func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
-	iidStr := c.Param("id")
-	logrus.Infof("[Review] Starting review for MR %s (background)", iidStr)
-	iid, err := strconv.Atoi(iidStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid merge request ID",
-		})
+	r, iid, ok := r.scoped(c, true)
+	if !ok {
 		return
 	}
+	logrus.Infof("[Review] Starting review for project %d MR %d (background)", r.pid(), iid)
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge request",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge request: " + err.Error()})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching diff",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching diff: " + err.Error()})
 		return
 	}
 
 	reviewable := r.filterDiffs(iid, diffs)
+	if !r.startRunning(iid, len(reviewable)) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Review of this merge request is already running"})
+		return
+	}
 
 	// Return 202 immediately, run review in background
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":      "started",
 		"message":     "Review started. Results will be delivered via WebSocket.",
+		"project_id":  r.pid(),
 		"mr_id":       iid,
 		"mr_title":    mr.Title,
 		"total_files": len(reviewable),
+		"engine":      r.config.Engine,
 	})
 
-	go r.runReview(mr, reviewable, diffs)
+	go func() {
+		defer r.stopRunning(iid)
+		r.runReview(mr, reviewable, diffs)
+	}()
+}
+
+// GetConfig exposes non-secret settings for the UI.
+func (r *ReviewService) GetConfig(c *gin.Context) {
+	model := r.config.AgentModel
+	if r.config.Engine == "llm" {
+		model = envString("AI_MODEL", "openai")
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"default_project_id": r.pid(),
+		"gitlab_url":         r.gitlabService.baseURL,
+		"engine":             r.config.Engine,
+		"model":              model,
+		"language":           r.config.Language,
+		"post_to_gitlab":     r.config.PostToGitLab,
+		"gitlab_mode":        r.config.GitLabMode,
+		"jira_enabled":       r.jira != nil,
+	})
 }
 
 // filterDiffs drops ignored/binary files and applies the REVIEW_MAX_FILES limit.
@@ -172,19 +296,19 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.Errorf("[Review] MR %d panic: %v", iid, rec)
-			r.wsHub.BroadcastReviewError(iid, fmt.Sprintf("review failed: %v", rec))
+			r.wsHub.BroadcastReviewError(r.pid(), iid, fmt.Sprintf("review failed: %v", rec))
 		}
 	}()
 
 	if len(diffs) == 0 {
-		r.wsHub.BroadcastReview(iid, &ai.CodeReview{Summary: "Brak plików do review (wszystkie pominięte lub usunięte).", Score: 0})
+		r.wsHub.BroadcastReview(r.pid(), iid, &ai.CodeReview{Summary: "Brak plików do review (wszystkie pominięte lub usunięte).", Score: 0})
 		return
 	}
 
 	refs, err := r.gitlabService.GetDiffRefs(iid)
 	if err != nil {
 		logrus.Errorf("[Review] MR %d: %v", iid, err)
-		r.wsHub.BroadcastReviewError(iid, err.Error())
+		r.wsHub.BroadcastReviewError(r.pid(), iid, err.Error())
 		return
 	}
 
@@ -208,11 +332,11 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		results, taskReview, err = r.runAgentReview(mr, refs, diffs, taskContext)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: %v", iid, err)
-			r.wsHub.BroadcastReviewError(iid, err.Error())
+			r.wsHub.BroadcastReviewError(r.pid(), iid, err.Error())
 			return
 		}
 		for i, res := range results {
-			r.wsHub.BroadcastReviewPart(iid, res.diff.NewPath, i, total, res.review)
+			r.wsHub.BroadcastReviewPart(r.pid(), iid, res.diff.NewPath, i, total, res.review)
 		}
 	} else {
 		results, taskReview = r.runLLMReview(mr, refs, diffs, allDiffs, taskContext)
@@ -272,7 +396,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		}
 	}
 
-	r.wsHub.BroadcastReview(iid, aggregated)
+	r.wsHub.BroadcastReview(r.pid(), iid, aggregated)
 	logrus.Infof("[Review] MR %d review completed (%d files)", iid, total)
 }
 
@@ -367,7 +491,8 @@ func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []D
 				res.review = &ai.CodeReview{Summary: "Nie udało się wykonać review tego pliku: " + err.Error()}
 			}
 			results[idx] = res
-			r.wsHub.BroadcastReviewPart(iid, d.NewPath, idx, total, res.review)
+			r.progressRunning(iid)
+			r.wsHub.BroadcastReviewPart(r.pid(), iid, d.NewPath, idx, total, res.review)
 		}(i, diff)
 	}
 	wg.Wait()
@@ -432,40 +557,15 @@ func dedupeStrings(s []string) []string {
 }
 
 func (r *ReviewService) GetProjects(c *gin.Context) {
-	projects, err := r.gitlabService.GetProjects()
+	projects, err := r.gitlabService.GetProjects(c.Query("refresh") != "")
 	if err != nil {
 		logrus.Errorf("Error fetching projects: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching projects",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching projects: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"projects": projects,
 		"count":    len(projects),
-	})
-}
-
-func (r *ReviewService) GetStats(c *gin.Context) {
-	mrs, err := r.gitlabService.GetMergeRequests("opened")
-	if err != nil {
-		logrus.Errorf("Error fetching stats: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"totalMRs":    "-",
-			"reviewedMRs": "-",
-			"avgScore":    "-",
-			"totalIssues": "-",
-		})
-		return
-	}
-
-	// TODO: Implement statistics logic based on saved reviews
-	// For now, return basic data
-	c.JSON(http.StatusOK, gin.H{
-		"totalMRs":    len(mrs),
-		"reviewedMRs": 0,   // TODO: policz z localStorage lub bazy danych
-		"avgScore":    "-", // TODO: policz średnią ocenę
-		"totalIssues": 0,   // TODO: policz łączne problemy
 	})
 }

@@ -20,7 +20,7 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	requiredEnvVars := []string{"GITLAB_TOKEN", "GITLAB_PROJECT_ID"}
+	requiredEnvVars := []string{"GITLAB_TOKEN"}
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
 			logrus.Fatalf("Missing required environment variable: %s", envVar)
@@ -65,11 +65,16 @@ func main() {
 			c.JSON(200, gin.H{"status": "OK", "message": "Code Review AI is running correctly"})
 		})
 
+		api.GET("/config", reviewService.GetConfig)
+		api.GET("/projects", reviewService.GetProjects)
+		api.GET("/projects/:pid/merge-requests", reviewService.GetMergeRequests)
+		api.GET("/projects/:pid/merge-requests/:id", reviewService.GetMergeRequest)
+		api.POST("/projects/:pid/merge-requests/:id/review", reviewService.ReviewMergeRequest)
+
+		// legacy routes - default project (GITLAB_PROJECT_ID)
 		api.GET("/merge-requests", reviewService.GetMergeRequests)
 		api.GET("/merge-requests/:id", reviewService.GetMergeRequest)
 		api.POST("/merge-requests/:id/review", reviewService.ReviewMergeRequest)
-		api.GET("/projects", reviewService.GetProjects)
-		api.GET("/stats", reviewService.GetStats)
 	}
 
 	port := os.Getenv("PORT")

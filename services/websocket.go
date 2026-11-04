@@ -24,6 +24,7 @@ const (
 
 type WSMessage struct {
 	Type       string      `json:"type"`
+	ProjectID  int         `json:"project_id,omitempty"`
 	MrID       int         `json:"mr_id,omitempty"`
 	Review     interface{} `json:"review,omitempty"`
 	File       string      `json:"file,omitempty"`
@@ -80,9 +81,10 @@ func (h *WSHub) Run() {
 	}
 }
 
-func (h *WSHub) BroadcastReviewPart(mrID int, file string, fileIndex, totalFiles int, review interface{}) {
+func (h *WSHub) BroadcastReviewPart(projectID, mrID int, file string, fileIndex, totalFiles int, review interface{}) {
 	msg := WSMessage{
 		Type:       MessageTypeReviewPart,
+		ProjectID:  projectID,
 		MrID:       mrID,
 		File:       file,
 		FileIndex:  fileIndex,
@@ -98,8 +100,8 @@ func (h *WSHub) BroadcastReviewPart(mrID int, file string, fileIndex, totalFiles
 	logrus.Infof("[WS] Broadcast review part for MR %d file %s (%d/%d)", mrID, file, fileIndex+1, totalFiles)
 }
 
-func (h *WSHub) BroadcastReview(mrID int, review interface{}) {
-	msg := WSMessage{Type: MessageTypeReview, MrID: mrID, Review: review}
+func (h *WSHub) BroadcastReview(projectID, mrID int, review interface{}) {
+	msg := WSMessage{Type: MessageTypeReview, ProjectID: projectID, MrID: mrID, Review: review}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		logrus.Errorf("[WS] Marshal error: %v", err)
@@ -126,8 +128,8 @@ func (h *WSHub) HandleWS(c *gin.Context) {
 	}
 }
 
-func (h *WSHub) BroadcastReviewError(mrID int, errMsg string) {
-	msg := WSMessage{Type: MessageTypeError, MrID: mrID, Error: errMsg, Message: errMsg}
+func (h *WSHub) BroadcastReviewError(projectID, mrID int, errMsg string) {
+	msg := WSMessage{Type: MessageTypeError, ProjectID: projectID, MrID: mrID, Error: errMsg, Message: errMsg}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		logrus.Errorf("[WS] Marshal error: %v", err)
