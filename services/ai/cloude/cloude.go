@@ -62,7 +62,7 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 				Content: []Content{
 					{
 						Type: "text",
-						Text: "You are a code review expert. Respond only in JSON format. All responses must be in English.\n\n" + prompt,
+						Text: "You are a code review expert. Respond only in JSON format. Write human-readable text in the language requested in the prompt.\n\n" + prompt,
 					},
 				},
 			},

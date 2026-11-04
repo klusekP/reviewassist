@@ -111,6 +111,51 @@ The application supports multiple AI providers. Set the `AI_MODEL` environment v
    - Set model in `MLX_MODEL`
    - Set endpoint in `MLX_BASE_URL` (default: `http://localhost:8081/v1`)
 
+## Context-aware review (GitLab + Jira)
+
+When you click **Review** on an MR (or call `POST /api/v1/merge-requests/{id}/review`), the app:
+
+1. **Reads the task from Jira**: it finds issue keys (e.g. `SHOP-123`) in the MR title, source branch and description, and fetches the summary, description, status, parent/epic and the latest comments (read-only).
+2. **Reads project context from the MR branch**: documentation (`REVIEW_DOCS_PATHS`: README, CLAUDE.md, AGENTS.md, docs/…), repository structure and the full content of each changed file.
+3. **Reviews each changed file**, looking only at the added lines (`+`). The model gets the diff with line numbers, so comments land on the right lines.
+4. **Reviews the whole MR against the task**: missing requirements, out-of-scope changes, missing tests or migrations.
+5. **Publishes the findings to GitLab** in `REVIEW_LANGUAGE` (default: Polish):
+   - inline comments on the changed lines, plus one summary note,
+   - `REVIEW_GITLAB_MODE=draft` (default): the comments are **draft notes** in your pending review, visible only to you. Open the MR in GitLab, edit or delete them, then click **Submit review** and optionally choose *Request changes* or *Approve*,
+   - re-running the review replaces the previous AI drafts and leaves your own drafts untouched,
+   - findings that can't be anchored to a diff line go into the summary note.
+
+### Review engines
+
+| `REVIEW_ENGINE` | How it works | Best for |
+|---|---|---|
+| `llm` (default) | The app builds the context itself (docs, full file, numbered diff) and sends one prompt per file plus one MR-level prompt to `AI_MODEL`. | Local or cheap models (Ollama, MLX) |
+| `claude-code` | The app clones the GitLab repo, fetches the MR source and target branches, and checks out the MR head in a temporary `git worktree`. Then [Claude Code](https://docs.claude.com/en/docs/claude-code) runs headless (`claude -p`) in that directory. It reads CLAUDE.md and the docs itself, and explores callers, tests and related code. | The best review quality |
+
+The `claude-code` engine:
+- needs `git` and `claude` in `PATH`. It runs locally, not in the Docker image.
+- restricts the agent to read-only tools (`Read`, `Grep`, `Glob`, `git diff/log/show/blame`). It can't edit files, run other commands, or access the web. The MR code is untrusted input.
+- hides the GitLab and Jira tokens and the other API keys from the agent. The app itself publishes the comments.
+- uses your claude.ai login (subscription) by default, and also hides `ANTHROPIC_API_KEY` from the agent. Set `CLAUDE_CODE_USE_API_KEY=true` to pay per token with the API key instead.
+- keeps the bare clone in `REVIEW_WORKDIR`. The first run clones the whole repo; later runs only fetch. The worktree is deleted after each review.
+
+### Jira configuration
+
+| Jira type | Variables |
+|---|---|
+| Cloud (`*.atlassian.net`) | `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` ([create token](https://id.atlassian.com/manage-profile/security/api-tokens)) |
+| Server / Data Center | `JIRA_URL`, `JIRA_API_TOKEN` (Personal Access Token), `JIRA_EMAIL` empty |
+
+Set `JIRA_PROJECT_KEYS=SHOP,API` to avoid false matches such as `UTF-8`. Without Jira, the review still works and uses the MR title and description as the task.
+
+### GitLab token
+
+The token needs the `api` scope. In `draft` mode the comments are created as the token owner, so use **your own** personal access token if you want them to appear in your pending review.
+
+### Local models
+
+Review prompts with full context take roughly 10–20k tokens. For Ollama, `OLLAMA_NUM_CTX` (default 32768) sets the context window; Ollama's default is much smaller and would silently truncate the prompt. With small models, lower `REVIEW_*_MAX_CHARS`.
+
 ## API Endpoints
 
 ### Health Check

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"codereviewAI/services/ai"
@@ -18,13 +19,20 @@ import (
 type Service struct {
 	baseURL string
 	model   string
+	numCtx  int
 }
 
 type OllamaRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Stream      bool      `json:"stream"`
-	Temperature float64   `json:"temperature"`
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+	Stream   bool      `json:"stream"`
+	Format   string    `json:"format,omitempty"`
+	Options  Options   `json:"options"`
+}
+
+type Options struct {
+	Temperature float64 `json:"temperature"`
+	NumCtx      int     `json:"num_ctx,omitempty"`
 }
 
 type Message struct {
@@ -46,14 +54,22 @@ func NewService(model string) (*Service, error) {
 		model = "llama2"
 	}
 
+	// Ollama's default context window (2-4k tokens) silently truncates review prompts
+	// that include project docs, the full file and the Jira task.
+	numCtx := 32768
+	if v, err := strconv.Atoi(os.Getenv("OLLAMA_NUM_CTX")); err == nil && v > 0 {
+		numCtx = v
+	}
+
 	return &Service{
 		baseURL: baseURL,
 		model:   model,
+		numCtx:  numCtx,
 	}, nil
 }
 
 func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, error) {
-	logrus.Infof("[Ollama] Sending review request to %s/api/chat (model: %s, prompt ~%d chars)", s.baseURL, s.model, len(prompt))
+	logrus.Infof("[Ollama] Sending review request to %s/api/chat (model: %s, num_ctx: %d, prompt ~%d chars)", s.baseURL, s.model, s.numCtx, len(prompt))
 
 	requestBody := OllamaRequest{
 		Model:  s.model,
@@ -61,14 +77,15 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 		Messages: []Message{
 			{
 				Role:    "system",
-				Content: "You are a code review expert. Respond only in JSON format. All responses must be in English.",
+				Content: "You are a code review expert. Respond only in JSON format. Write human-readable text in the language requested in the prompt.",
 			},
 			{
 				Role:    "user",
 				Content: prompt,
 			},
 		},
-		Temperature: 0.3,
+		Format:  "json",
+		Options: Options{Temperature: 0.2, NumCtx: s.numCtx},
 	}
 
 	jsonData, err := json.Marshal(requestBody)
@@ -110,9 +127,10 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 }
 
 func parseReviewResponse(content string) (*ai.CodeReview, error) {
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
+	if start, end := strings.Index(content, "{"), strings.LastIndex(content, "}"); start >= 0 && end > start {
+		content = content[start : end+1]
+	}
 
 	var review ai.CodeReview
 	if err := json.Unmarshal([]byte(content), &review); err != nil {

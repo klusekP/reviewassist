@@ -133,9 +133,18 @@ func (g *GitLabService) GetMergeRequest(iid int) (*MergeRequest, error) {
 }
 
 func (g *GitLabService) GetMergeRequestDiffs(iid int) ([]Diff, error) {
-	diffs, _, err := g.client.MergeRequests.ListMergeRequestDiffs(g.projectID, iid, &gitlab.ListMergeRequestDiffsOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("error fetching diff: %v", err)
+	opts := &gitlab.ListMergeRequestDiffsOptions{PerPage: 100, Page: 1}
+	var diffs []*gitlab.MergeRequestDiff
+	for {
+		page, resp, err := g.client.MergeRequests.ListMergeRequestDiffs(g.projectID, iid, opts)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching diff: %v", err)
+		}
+		diffs = append(diffs, page...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 
 	var result []Diff

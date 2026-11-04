@@ -53,7 +53,7 @@ func (s *Service) Review(ctx context.Context, prompt string) (*ai.CodeReview, er
 		Messages: []KimiMessage{
 			{
 				Role:    "system",
-				Content: "You are a code review expert. Respond only in JSON format. All responses must be in English.",
+				Content: "You are a code review expert. Respond only in JSON format. Write human-readable text in the language requested in the prompt.",
 			},
 			{
 				Role:    "user",

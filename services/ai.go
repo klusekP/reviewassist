@@ -22,8 +22,9 @@ type AIService struct {
 }
 
 type (
-	CodeReview = ai.CodeReview
-	Issue      = ai.Issue
+	CodeReview  = ai.CodeReview
+	Issue       = ai.Issue
+	Requirement = ai.Requirement
 )
 
 func NewAIService() *AIService {
