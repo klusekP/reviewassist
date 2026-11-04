@@ -15,9 +15,9 @@ AI application for automatic code review of GitLab Merge Requests. The applicati
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.25+
 - GitLab Personal Access Token
-- AI API Key (OpenAI, Claude, KIMI, or Ollama)
+- AI API Key (OpenAI, Claude, KIMI) or local server (Ollama/MLX)
 
 ## Installation
 
@@ -45,7 +45,10 @@ GITLAB_PROJECT_ID=123456
 OPENAI_API_KEY=your_openai_api_key
 CLAUDE_API_KEY=your_claude_api_key
 KIMI_API_KEY=your_kimi_api_key
-AI_MODEL=openai  # Options: openai, claude, kimi, ollama
+AI_MODEL=openai  # Options: openai, claude, kimi, ollama, mlx
+MLX_API_KEY=mlx-local
+MLX_MODEL=mlx-community/Qwen2.5-Coder-32B-Instruct-4bit
+MLX_BASE_URL=http://localhost:8081/v1
 PORT=8080
 ```
 
@@ -100,6 +103,13 @@ The application supports multiple AI providers. Set the `AI_MODEL` environment v
    - Follow instructions at [Ollama](https://ollama.ai/)
    - Set `OLLAMA_MODEL` to your preferred model
    - Set `AI_MODEL=ollama`
+
+### MLX Server Configuration
+1. **Run local MLX server with OpenAI-compatible API:**
+   - Set `AI_MODEL=mlx`
+   - Optional auth token: `MLX_API_KEY` (default: `mlx-local`)
+   - Set model in `MLX_MODEL`
+   - Set endpoint in `MLX_BASE_URL` (default: `http://localhost:8081/v1`)
 
 ## API Endpoints
 

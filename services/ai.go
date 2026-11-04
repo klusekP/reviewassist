@@ -9,6 +9,7 @@ import (
 	"codereviewAI/services/ai"
 	aiClaude "codereviewAI/services/ai/cloude"
 	aiKimi "codereviewAI/services/ai/kimi"
+	aiMLX "codereviewAI/services/ai/mlx"
 	aiOllama "codereviewAI/services/ai/ollama"
 	aiOpenAI "codereviewAI/services/ai/openai"
 	aiOpenCode "codereviewAI/services/ai/opencode"
@@ -64,6 +65,16 @@ func NewAIService() *AIService {
 		aiProvider, err = aiOpenCode.NewService(opencodeAPIKey)
 		if err != nil {
 			logrus.Errorf("Failed to create OpenCode service: %v", err)
+			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
+			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
+		}
+	case "mlx":
+		mlxBaseURL := os.Getenv("MLX_BASE_URL")
+		mlxModel := os.Getenv("MLX_MODEL")
+		mlxAPIKey := os.Getenv("MLX_API_KEY")
+		aiProvider, err = aiMLX.NewService(mlxBaseURL, mlxModel, mlxAPIKey)
+		if err != nil {
+			logrus.Errorf("Failed to create MLX service: %v", err)
 			openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 			aiProvider, _ = aiOpenAI.NewService(openaiAPIKey)
 		}

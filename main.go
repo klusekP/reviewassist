@@ -20,7 +20,7 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	requiredEnvVars := []string{"GITLAB_TOKEN", "OPENAI_API_KEY", "GITLAB_PROJECT_ID"}
+	requiredEnvVars := []string{"GITLAB_TOKEN", "GITLAB_PROJECT_ID"}
 	for _, envVar := range requiredEnvVars {
 		if os.Getenv(envVar) == "" {
 			logrus.Fatalf("Missing required environment variable: %s", envVar)
