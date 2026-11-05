@@ -181,3 +181,101 @@ func (g *GitLabService) GetMergeRequestCommitMessages(iid int) ([]string, error)
 	}
 	return msgs, nil
 }
+
+// BotThread is an inline discussion started by this app (a finding of an earlier review).
+type BotThread struct {
+	DiscussionID string
+	NoteID       int
+	Body         string // first note without BotMarker
+	File         string
+	Line         int
+	HeadSha      string // MR head the finding was made on
+	Resolved     bool
+	Replies      []string // "author: text" of later notes written by people
+}
+
+// ListBotThreads returns inline discussions whose first note was created by this app.
+func (g *GitLabService) ListBotThreads(iid int) ([]BotThread, error) {
+	opts := &gitlab.ListMergeRequestDiscussionsOptions{PerPage: 100, Page: 1}
+	var out []BotThread
+	for {
+		discussions, resp, err := g.client.Discussions.ListMergeRequestDiscussions(g.projectID, iid, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range discussions {
+			if len(d.Notes) == 0 {
+				continue
+			}
+			first := d.Notes[0]
+			if first.System || first.Position == nil || !strings.Contains(first.Body, BotMarker) {
+				continue
+			}
+			t := BotThread{
+				DiscussionID: d.ID,
+				NoteID:       first.ID,
+				Body:         strings.TrimSpace(strings.ReplaceAll(first.Body, BotMarker, "")),
+				File:         first.Position.NewPath,
+				Line:         first.Position.NewLine,
+				HeadSha:      first.Position.HeadSHA,
+				Resolved:     first.Resolvable && first.Resolved,
+			}
+			for _, n := range d.Notes[1:] {
+				if n.System || strings.Contains(n.Body, BotMarker) {
+					continue
+				}
+				t.Replies = append(t.Replies, n.Author.Username+": "+strings.TrimSpace(n.Body))
+			}
+			out = append(out, t)
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return out, nil
+}
+
+// ReplyToThread answers a bot discussion and optionally resolves it. In draft mode the reply is a
+// draft note (resolution happens on "Submit review"); otherwise it is published immediately.
+func (g *GitLabService) ReplyToThread(iid int, discussionID, body string, resolve bool, mode string) error {
+	body += "\n\n" + BotMarker
+	if mode != "comment" {
+		payload := struct {
+			Note                  string `json:"note"`
+			InReplyToDiscussionID string `json:"in_reply_to_discussion_id"`
+			ResolveDiscussion     bool   `json:"resolve_discussion,omitempty"`
+		}{body, discussionID, resolve}
+		req, err := g.client.NewRequest(http.MethodPost, fmt.Sprintf("projects/%d/merge_requests/%d/draft_notes", g.projectID, iid), payload, nil)
+		if err != nil {
+			return err
+		}
+		_, err = g.client.Do(req, nil)
+		return err
+	}
+	if _, _, err := g.client.Discussions.AddMergeRequestDiscussionNote(g.projectID, iid, discussionID,
+		&gitlab.AddMergeRequestDiscussionNoteOptions{Body: &body}); err != nil {
+		return err
+	}
+	if !resolve {
+		return nil
+	}
+	resolved := true
+	_, _, err := g.client.Discussions.ResolveMergeRequestDiscussion(g.projectID, iid, discussionID,
+		&gitlab.ResolveMergeRequestDiscussionOptions{Resolved: &resolved})
+	return err
+}
+
+// CompareDiffs returns file diffs between two commits (e.g. previous review head and current head).
+func (g *GitLabService) CompareDiffs(from, to string) ([]Diff, error) {
+	cmp, _, err := g.client.Repositories.Compare(g.projectID, &gitlab.CompareOptions{From: &from, To: &to})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Diff, 0, len(cmp.Diffs))
+	for _, d := range cmp.Diffs {
+		out = append(out, Diff{OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
+			NewFile: d.NewFile, RenamedFile: d.RenamedFile, DeletedFile: d.DeletedFile})
+	}
+	return out, nil
+}

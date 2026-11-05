@@ -15,6 +15,8 @@ type labels struct {
 	verdict, security, quality, requirements, reqHeader                                                               string
 	verdicts                                                                                                          map[string]string
 	header, task, noTask, score, taskFindings, outsideDiff, suggestions, fix, failedFiles, footerDraft, footerComment string
+
+	reReview, reFixed, reOpen, reAccepted, reNew, replyFixed, replyAccepted string
 }
 
 func (c *ReviewConfig) labels() labels {
@@ -41,6 +43,13 @@ func (c *ReviewConfig) labels() labels {
 			failedFiles:   "### Pliki, których nie udało się przeanalizować",
 			footerDraft:   "_Komentarze wygenerowane automatycznie jako szkic review. Zweryfikuj je przed opublikowaniem._",
 			footerComment: "_Komentarze wygenerowane automatycznie przez AI._",
+			reReview:      "### 🔁 Ponowne review (zmiany od `%s`)",
+			reFixed:       "poprawione",
+			reOpen:        "nadal otwarte",
+			reAccepted:    "zaakceptowane",
+			reNew:         "nowe uwagi",
+			replyFixed:    "✅ **Poprawione** w `%s`",
+			replyAccepted: "👍 **Wyjaśnienie przyjęte**, problem pozostawiony świadomie",
 		}
 	}
 	return labels{
@@ -65,6 +74,13 @@ func (c *ReviewConfig) labels() labels {
 		failedFiles:   "### Files that could not be reviewed",
 		footerDraft:   "_Generated automatically as a draft review. Verify before submitting._",
 		footerComment: "_Generated automatically by AI._",
+		reReview:      "### 🔁 Re-review (changes since `%s`)",
+		reFixed:       "fixed",
+		reOpen:        "still open",
+		reAccepted:    "accepted",
+		reNew:         "new findings",
+		replyFixed:    "✅ **Fixed** in `%s`",
+		replyAccepted: "👍 **Explanation accepted**, issue left intentionally",
 	}
 }
 
@@ -98,7 +114,7 @@ func formatIssue(l labels, is ai.Issue, withLocation bool) string {
 
 // publishToGitLab posts inline comments for each finding and one summary note.
 // Returns a short human-readable status line.
-func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, results []fileResult, taskReview *ai.CodeReview, jiraIssues []*JiraIssue) (string, error) {
+func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, results []fileResult, taskReview *ai.CodeReview, jiraIssues []*JiraIssue, rr *reReview) (string, error) {
 	cfg := r.config
 	l := cfg.labels()
 	mode := cfg.GitLabMode
@@ -148,9 +164,49 @@ func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, result
 		}
 	}
 
+	// Re-review: answer and resolve threads of fixed / accepted findings
+	resolved := 0
+	if rr != nil && rr.source == "gitlab" {
+		for _, f := range rr.findings {
+			if f.DiscussionID == "" || f.Status == ai.FindingOpen {
+				continue
+			}
+			body := l.replyAccepted
+			if f.Status == ai.FindingFixed {
+				body = fmt.Sprintf(l.replyFixed, shortSha(refs.HeadSha))
+			}
+			if f.Comment != "" {
+				body += "\n\n" + f.Comment
+			}
+			if err := r.gitlabService.ReplyToThread(mr.IID, f.DiscussionID, body, true, mode); err != nil {
+				logrus.Warnf("[GitLab] Reply to thread %s failed: %v", f.DiscussionID, err)
+				continue
+			}
+			resolved++
+		}
+	}
+
 	// Summary note
 	var b strings.Builder
 	b.WriteString(l.header + "\n\n")
+	if rr != nil {
+		fu := rr.followup()
+		fmt.Fprintf(&b, l.reReview+"\n\n", shortSha(rr.sinceSHA))
+		fmt.Fprintf(&b, "✅ %s: **%d** · ⏳ %s: **%d** · 👍 %s: **%d** · 🆕 %s: **%d**\n\n",
+			l.reFixed, fu.Fixed, l.reOpen, fu.Open, l.reAccepted, fu.Accepted, l.reNew, fu.New)
+		for _, it := range fu.Items {
+			if it.Status != ai.FindingOpen {
+				continue
+			}
+			loc := fmt.Sprintf("`%s:%d`", it.File, it.Line)
+			if it.URL != "" {
+				loc = fmt.Sprintf("[%s](%s)", loc, it.URL)
+			}
+			desc := strings.SplitN(strings.TrimSpace(it.Description), "\n", 2)[0]
+			fmt.Fprintf(&b, "- ⏳ %s **[%s]** %s %s\n", severityIcon[it.Severity], it.Severity, loc, truncate(desc, 200, "…"))
+		}
+		b.WriteString("\n")
+	}
 	if len(jiraIssues) > 0 {
 		for _, ji := range jiraIssues {
 			fmt.Fprintf(&b, "**%s:** [%s](%s) %s (%s)\n\n", l.task, ji.Key, ji.URL, ji.Summary, ji.Status)
@@ -222,6 +278,9 @@ func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, result
 	}
 
 	status := fmt.Sprintf("GitLab (%s): %d komentarzy w kodzie + podsumowanie", mode, inline)
+	if resolved > 0 {
+		status += fmt.Sprintf(", %d wątków z poprzedniego review zamkniętych", resolved)
+	}
 	if failed > 0 {
 		status += fmt.Sprintf(", %d przeniesionych do podsumowania", failed)
 	}

@@ -103,7 +103,7 @@ func (s *Store) OrderTotals(ids []int) map[int]float64 {
 			"- Użytkownik może pobrać dane swojego zamówienia (id, email, total) w formacie JSON.\n"+
 			"- Eksport dostępny tylko dla zamówień o statusie 'paid'.\n"+
 			"- Próba pobrania cudzego zamówienia zwraca 404.\n\n"+
-			"Comments (oldest first):\n- [Product Owner, 2026-10-01]: Zmiana ustaleń: zamiast JSON eksportujemy CSV z nagłówkiem.\n")
+			"Comments (oldest first):\n- [Product Owner, 2026-10-01]: Zmiana ustaleń: zamiast JSON eksportujemy CSV z nagłówkiem.\n", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()

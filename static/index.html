@@ -410,6 +410,27 @@
                         </div>
                       </template>
 
+                      <template x-if="currentReview.followup && (currentReview.followup.items || []).length">
+                        <div class="card">
+                          <h3>🔁 Ponowne review <span class="faint" x-text="'· zmiany od ' + (currentReview.followup.since_sha || '').slice(0, 8) + ' · ' + followupSummary(currentReview.followup)"></span></h3>
+                          <table class="req"><tbody>
+                            <template x-for="it in currentReview.followup.items" :key="it.id">
+                              <tr>
+                                <td :title="followupLabel(it.status)" x-text="followupIcon(it.status)"></td>
+                                <td>
+                                  <div x-text="(it.description || '').split('\n')[0]"></div>
+                                  <div class="faint" x-show="it.comment" x-text="it.comment"></div>
+                                </td>
+                                <td class="ev">
+                                  <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" x-text="it.file + ':' + it.line"></a>
+                                  <span x-show="!it.url" x-text="it.file + ':' + it.line"></span>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody></table>
+                        </div>
+                      </template>
+
                       <div class="card-grid" x-show="currentReview.security_summary || currentReview.quality_summary" style="margin-bottom: 14px">
                         <div class="card" x-show="currentReview.security_summary">
                           <h3><svg class="icon icon-sm"><use href="#i-shield"/></svg>Bezpieczeństwo</h3>

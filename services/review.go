@@ -336,12 +336,18 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 	}
 	taskContext, issues := r.jira.BuildTaskContext(keySources...)
 
+	// Re-review: findings of the previous review to check against the current code
+	rr := r.loadPreviousFindings(mr, refs)
+	if rr.empty() {
+		rr = nil
+	}
+
 	// 2. Review with the configured engine
 	var results []fileResult
 	var taskReview *ai.CodeReview
 	total := len(diffs)
 	if r.config.Engine == "claude-code" {
-		results, taskReview, err = r.runAgentReview(mr, refs, diffs, taskContext)
+		results, taskReview, err = r.runAgentReview(mr, refs, diffs, taskContext, rr)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: %v", iid, err)
 			r.wsHub.BroadcastReviewError(r.pid(), iid, err.Error())
@@ -351,7 +357,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 			r.wsHub.BroadcastReviewPart(r.pid(), iid, res.diff.NewPath, i, total, res.review)
 		}
 	} else {
-		results, taskReview = r.runLLMReview(mr, refs, diffs, allDiffs, taskContext)
+		results, taskReview = r.runLLMReview(mr, refs, diffs, allDiffs, taskContext, rr)
 	}
 
 	// 3. Scope guard + final verdict (never milder than the findings justify)
@@ -359,12 +365,33 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		taskReview = &ai.CodeReview{Summary: "Brak oceny całościowej (błąd modelu)."}
 	}
 	applyScope(iid, results, taskReview, allDiffs)
+
+	// 3a. Re-review: status of previous findings, no repeated comments
+	var stillOpen []ai.Issue
+	if rr != nil {
+		statuses := taskReview.PreviousFindings // claude-code answers in the main review
+		if r.config.Engine != "claude-code" {
+			var err error
+			if statuses, err = r.checkPreviousFindings(mr, refs, rr); err != nil {
+				logrus.Warnf("[ReReview] MR %d: check of previous findings failed: %v", iid, err)
+			}
+		}
+		rr.applyStatuses(statuses)
+		rr.dropRepeated(iid, results, taskReview)
+		stillOpen = rr.openIssues()
+	}
+	taskReview.PreviousFindings = nil
+
 	allIssues := append([]ai.Issue{}, taskReview.Issues...)
 	for _, res := range results {
 		if !res.failed {
 			allIssues = append(allIssues, res.review.Issues...)
 		}
 	}
+	if rr != nil {
+		rr.newFindings = len(allIssues)
+	}
+	allIssues = append(allIssues, stillOpen...)
 	taskReview.Verdict = finalVerdict(taskReview.Verdict, allIssues, taskReview.Requirements)
 
 	// 4. Aggregate for the web UI
@@ -386,6 +413,11 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		aggregated.SecuritySummary = taskReview.SecuritySummary
 		aggregated.QualitySummary = taskReview.QualitySummary
 		aggregated.Requirements = taskReview.Requirements
+		aggregated.Issues = append(aggregated.Issues, stillOpen...)
+		if rr != nil {
+			aggregated.Followup = rr.followup()
+			aggregated.Summary += "\n\n🔁 " + followupLine(aggregated.Followup)
+		}
 		if line := requirementsLine(taskReview.Requirements); line != "" {
 			aggregated.Summary += "\n\n📋 " + line
 		}
@@ -399,7 +431,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 
 	// 5. Publish to GitLab
 	if r.config.PostToGitLab {
-		published, err := r.publishToGitLab(mr, refs, results, taskReview, issues)
+		published, err := r.publishToGitLab(mr, refs, results, taskReview, issues, rr)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: publishing to GitLab failed: %v", iid, err)
 			aggregated.Summary += "\n\n⚠️ Błąd publikacji w GitLab: " + err.Error()
@@ -457,7 +489,7 @@ func applyScope(iid int, results []fileResult, taskReview *ai.CodeReview, allDif
 }
 
 // runLLMReview is the prompt-based engine: one LLM call per file plus one MR-level call.
-func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, allDiffs []Diff, taskContext string) ([]fileResult, *ai.CodeReview) {
+func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, allDiffs []Diff, taskContext string, rr *reReview) ([]fileResult, *ai.CodeReview) {
 	iid := mr.IID
 	project := r.BuildProjectContext(refs.HeadSha)
 
@@ -496,6 +528,8 @@ func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []D
 				SourceBranch:  mr.SourceBranch,
 				TaskContext:   taskContext,
 				Project:       project,
+
+				PreviousFindings: rr.fileSection(d.NewPath),
 			})
 			res := fileResult{diff: d, lines: lines, review: review}
 			if err != nil {

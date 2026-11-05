@@ -460,6 +460,9 @@ function app() {
     esc: escapeHtml,
     verdict(v) { return VERDICTS[v] || null; },
     mergeStatus(s) { return MERGE_STATUS[s] || s || '—'; },
+    followupIcon(s) { return { fixed: '✅', open: '⏳', accepted: '👍' }[s] || '•'; },
+    followupLabel(s) { return { fixed: 'Poprawione', open: 'Nadal otwarte', accepted: 'Wyjaśnienie przyjęte' }[s] || s; },
+    followupSummary(f) { return `poprawione ${f.fixed}, otwarte ${f.open}, zaakceptowane ${f.accepted}, nowe ${f.new}`; },
     reqIcon(s) { return { done: '✅', partial: '⚠️', missing: '❌', unclear: '❓' }[s] || '•'; },
     reqSummary(reqs) {
       if (!reqs?.length) return '';
