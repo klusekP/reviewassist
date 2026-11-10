@@ -73,6 +73,11 @@ codereviewAI/
 └── env.example                # configuration template
 ```
 
+## Roadmap
+
+Next up: security hardening, an **automatic review flow** (webhooks, CI job, auto re-review on push)
+and **GitHub support**. See [ROADMAP.md](ROADMAP.md).
+
 ## Development
 
 ```bash

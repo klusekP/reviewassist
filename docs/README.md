@@ -17,6 +17,7 @@ draft review that you check and submit yourself.
 | [REST API](api.md) | HTTP endpoints and the WebSocket used by the panel |
 | [Security and privacy](security.md) | What data goes where, how secrets are stored, agent sandboxing, deployment advice |
 | [Troubleshooting and FAQ](troubleshooting.md) | Common problems and their fixes |
+| [Roadmap](../ROADMAP.md) | Planned features: automatic review flow, GitHub support and more |
 
 ## In one minute
 

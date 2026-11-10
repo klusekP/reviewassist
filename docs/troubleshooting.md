@@ -109,7 +109,12 @@ Click the `PL` button in the sidebar status bar, or set `UI_LANGUAGE=en`. See [L
 **Does the app approve or merge MRs?** No. It only adds comments; approving, requesting changes
 and merging stay with you.
 
-**Can it review GitHub or Bitbucket?** Not yet; only GitLab is supported.
+**Can it review GitHub or Bitbucket?** Not yet; only GitLab is supported. GitHub support is
+planned, see the [roadmap](../ROADMAP.md#-github-support).
+
+**Can reviews start automatically when an MR is opened or updated?** Not yet; reviews are started
+from the panel or the API. Webhooks and a CI job are planned, see the
+[roadmap](../ROADMAP.md#-automatic-review-flow).
 
 **Does it work with self-hosted GitLab and Jira?** Yes; set `GITLAB_URL` and `JIRA_URL` to your
 instances.
