@@ -1,6 +1,7 @@
 package services
 
 import (
+	"codereviewAI/services/i18n"
 	"context"
 	"os"
 	"os/exec"
@@ -66,7 +67,7 @@ func TestSplitAgentReview(t *testing.T) {
 		{File: "", Line: float64(0), Description: "MR-level"},
 		{File: "other.go", Line: float64(3), Description: "not reviewed file"},
 	}}
-	results, task := splitAgentReview(review, diffs)
+	results, task := splitAgentReview(i18n.EN, review, diffs)
 	if n := len(results[0].review.Issues); n != 2 {
 		t.Errorf("file issues = %d, want 2", n)
 	}

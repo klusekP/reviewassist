@@ -1,6 +1,7 @@
 package services
 
 import (
+	"codereviewAI/services/i18n"
 	"reflect"
 	"regexp"
 	"strings"
@@ -171,9 +172,15 @@ func TestFinalVerdictRequirements(t *testing.T) {
 }
 
 func TestRequirementsLineAndTableCell(t *testing.T) {
-	line := requirementsLine([]Requirement{{Status: "done"}, {Status: "done"}, {Status: "partial"}, {Status: "missing"}})
-	if line != "Wymagania: 2/4 zrealizowane, 1 częściowo, 1 brak" {
-		t.Errorf("requirementsLine = %q", line)
+	reqs := []Requirement{{Status: "done"}, {Status: "done"}, {Status: "partial"}, {Status: "missing"}}
+	for lang, want := range map[string]string{
+		i18n.PL: "Wymagania: 2/4 zrealizowane, 1 częściowo, 1 brak",
+		i18n.EN: "Requirements: 2/4 done, 1 partial, 1 missing",
+		i18n.DE: "Anforderungen: 2/4 umgesetzt, 1 teilweise, 1 fehlt",
+	} {
+		if line := requirementsLine(lang, reqs); line != want {
+			t.Errorf("requirementsLine(%s) = %q, want %q", lang, line, want)
+		}
 	}
 	if got := tableCell("a | b\nc"); got != `a \| b<br>c` {
 		t.Errorf("tableCell = %q", got)

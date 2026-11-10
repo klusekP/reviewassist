@@ -1,1504 +1,673 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Code Review AI</title>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px;
-        overflow-x: hidden;
-        width: 100%;
-      }
-
-      .container {
-        max-width: 1200px;
-        width: 100%;
-        margin: 0 auto;
-        background: white;
-        border-radius: 15px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-      }
-
-      .header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        text-align: center;
-      }
-
-      .header h1 {
-        font-size: 2.5em;
-        margin-bottom: 10px;
-      }
-
-      .header p {
-        font-size: 1.1em;
-        opacity: 0.9;
-      }
-
-      .content {
-        padding: 30px;
-        overflow-x: hidden;
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        margin-bottom: 30px;
-      }
-
-      .stat-card {
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        border-left: 4px solid #667eea;
-      }
-
-      .stat-number {
-        font-size: 2em;
-        font-weight: bold;
-        color: #667eea;
-        transition: all 0.3s ease;
-      }
-
-      .stat-label {
-        color: #666;
-        margin-top: 5px;
-      }
-
-      .section {
-        margin-bottom: 30px;
-      }
-
-      .section h2 {
-        color: #333;
-        margin-bottom: 15px;
-        font-size: 1.5em;
-      }
-
-      .merge-requests {
-        display: grid;
-        gap: 15px;
-      }
-
-      .mr-card {
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 20px;
-        transition:
-          transform 0.2s,
-          box-shadow 0.2s;
-        overflow-x: hidden;
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      .mr-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-      }
-
-      .mr-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-      }
-
-      .mr-title {
-        font-weight: bold;
-        color: #333;
-        font-size: 1.1em;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .mr-id {
-        background: #667eea;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 15px;
-        font-size: 0.8em;
-      }
-
-      .mr-author {
-        color: #666;
-        font-size: 0.9em;
-        margin-bottom: 10px;
-      }
-
-      .mr-branches {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 15px;
-      }
-
-      .branch {
-        background: #e9ecef;
-        padding: 4px 8px;
-        border-radius: 5px;
-        font-size: 0.8em;
-        color: #666;
-      }
-
-      .mr-actions {
-        display: flex;
-        gap: 10px;
-      }
-
-      .btn {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 0.9em;
-        transition: background 0.2s;
-      }
-
-      .btn-primary {
-        background: #667eea;
-        color: white;
-      }
-
-      .btn-primary:hover {
-        background: #5a6fd8;
-      }
-
-      .btn-secondary {
-        background: #6c757d;
-        color: white;
-      }
-
-      .btn-secondary:hover {
-        background: #5a6268;
-      }
-
-      .btn-success {
-        background: #28a745;
-        color: white;
-      }
-
-      .btn-success:hover {
-        background: #218838;
-      }
-
-      .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 40px;
-        color: #666;
-      }
-
-      .loading-spinner {
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #667eea;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-
-      .hidden {
-        display: none !important;
-      }
-
-      /* Snackbar styles */
-      .snackbar {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: #333;
-        color: white;
-        padding: 16px 24px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 1000;
-        transform: translateX(100%);
-        transition: transform 0.3s ease-in-out;
-        max-width: 400px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .snackbar.show {
-        transform: translateX(0);
-      }
-
-      .snackbar.success {
-        background: #4caf50;
-      }
-
-      .snackbar.error {
-        background: #f44336;
-      }
-
-      .snackbar.warning {
-        background: #ff9800;
-      }
-
-      .snackbar.info {
-        background: #2196f3;
-      }
-
-      .snackbar-icon {
-        font-size: 20px;
-        flex-shrink: 0;
-      }
-
-      .snackbar-content {
-        flex: 1;
-      }
-
-      .snackbar-title {
-        font-weight: 600;
-        margin-bottom: 4px;
-      }
-
-      .snackbar-message {
-        font-size: 14px;
-        opacity: 0.9;
-      }
-
-      .snackbar-close {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        padding: 0;
-        margin-left: 8px;
-        opacity: 0.7;
-        transition: opacity 0.2s;
-      }
-
-      .snackbar-close:hover {
-        opacity: 1;
-      }
-
-      /* Collapsible sections */
-      .collapsible-section {
-        margin-top: 15px;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .collapsible-header {
-        background: #f8f9fa;
-        padding: 12px 16px;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #e9ecef;
-        transition: background-color 0.2s;
-      }
-
-      .collapsible-header-right {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .collapsible-header:hover {
-        background: #e9ecef;
-      }
-
-      .collapsible-header h4 {
-        margin: 0;
-        font-size: 1em;
-        color: #333;
-        font-weight: 600;
-      }
-
-      .collapsible-icon {
-        font-size: 14px;
-        color: #666;
-        transition: transform 0.2s;
-        user-select: none;
-      }
-
-      .collapsible-content {
-        padding: 16px;
-        background: white;
-        animation: slideDown 0.3s ease-out;
-      }
-
-      @keyframes slideDown {
-        from {
-          opacity: 0;
-          max-height: 0;
-        }
-        to {
-          opacity: 1;
-          max-height: 1000px;
-        }
-      }
-
-      @keyframes slideInRight {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-
-      @keyframes slideOutRight {
-        from {
-          transform: translateX(0);
-          opacity: 1;
-        }
-        to {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-      }
-
-      /* GitHub-style diff styles */
-      .diff-container {
-        border: 1px solid #d0d7de;
-        border-radius: 6px;
-        margin: 10px 0;
-        overflow: hidden;
-      }
-
-      .diff-header {
-        background: #f6f8fa;
-        border-bottom: 1px solid #d0d7de;
-        padding: 8px 16px;
-        font-size: 12px;
-        color: #656d76;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .diff-file-name {
-        font-weight: 600;
-        color: #24292f;
-      }
-
-      .diff-stats {
-        font-size: 11px;
-      }
-
-      .diff-content {
-        background: #ffffff;
-      }
-
-      .diff-hunk-header {
-        background: #f1f8ff;
-        border-bottom: 1px solid #d0d7de;
-        padding: 4px 16px;
-        font-size: 11px;
-        color: #656d76;
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-      }
-
-      .diff-line {
-        display: flex;
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      .diff-line-number {
-        width: 50px;
-        padding: 0 8px;
-        text-align: right;
-        color: #656d76;
-        background: #f6f8fa;
-        border-right: 1px solid #d0d7de;
-        user-select: none;
-        flex-shrink: 0;
-      }
-
-      .diff-line-number.added {
-        background: #e6f7e6;
-      }
-
-      .diff-line-number.removed {
-        background: #ffe6e6;
-      }
-
-      .diff-line-content {
-        flex: 1;
-        padding: 0 8px;
-        white-space: pre-wrap;
-        word-break: break-all;
-        overflow-x: auto;
-      }
-
-      .diff-line.added {
-        background: #f0f9f0;
-      }
-
-      .diff-line.removed {
-        background: #fdf2f2;
-      }
-
-      .diff-line.added .diff-line-content {
-        color: #2d5a2d;
-      }
-
-      .diff-line.removed .diff-line-content {
-        color: #8b2635;
-      }
-
-      .diff-line.added .diff-line-number {
-        background: #e6f7e6;
-        color: #2d5a2d;
-      }
-
-      .diff-line.removed .diff-line-number {
-        background: #ffe6e6;
-        color: #8b2635;
-      }
-
-      .diff-line.context .diff-line-number {
-        background: #f6f8fa;
-        color: #656d76;
-      }
-
-      .diff-line.context .diff-line-content {
-        color: #24292f;
-      }
-
-      .diff-line .diff-line-number::before {
-        content: attr(data-line);
-      }
-
-      .diff-line .diff-line-number.added::before {
-        content: "+";
-      }
-
-      .diff-line .diff-line-number.removed::before {
-        content: "-";
-      }
-
-      .diff-line .diff-line-number.context::before {
-        content: " ";
-      }
-
-      /* Issue/Comment styles for diff lines */
-      .diff-line.has-issue {
-        position: relative;
-      }
-
-      .diff-line-issue {
-        margin-top: 8px;
-        margin-left: 58px;
-        padding: 8px 12px;
-        border-left: 3px solid;
-        background: #fff8e1;
-        border-radius: 4px;
-        font-size: 12px;
-      }
-
-      .diff-line-issue.critical {
-        border-left-color: #d32f2f;
-        background: #ffebee;
-      }
-
-      .diff-line-issue.high {
-        border-left-color: #f57c00;
-        background: #fff3e0;
-      }
-
-      .diff-line-issue.medium {
-        border-left-color: #fbc02d;
-        background: #fffde7;
-      }
-
-      .diff-line-issue.low {
-        border-left-color: #388e3c;
-        background: #e8f5e9;
-      }
-
-      .diff-line-issue-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 4px;
-        font-weight: 600;
-      }
-
-      .diff-line-issue-type {
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 3px;
-        background: rgba(0,0,0,0.1);
-        font-weight: 500;
-      }
-
-      .diff-line-issue[data-type="refactoring"] .diff-line-issue-type {
-        background: #7b1fa2;
-        color: white;
-        font-weight: 600;
-      }
-
-      .issue-type.refactoring {
-        background: #7b1fa2;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 3px;
-        font-weight: 600;
-      }
-
-      .diff-line-issue-description {
-        color: #424242;
-        margin-bottom: 4px;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .diff-line-issue-fix {
-        margin-top: 6px;
-        padding-top: 6px;
-        border-top: 1px solid rgba(0,0,0,0.1);
-        font-size: 11px;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .diff-line-issue-fix strong {
-        color: #1976d2;
-      }
-
-      .diff-line-issue-code {
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-        background: rgba(0,0,0,0.05);
-        padding: 4px 6px;
-        border-radius: 3px;
-        margin-top: 4px;
-        font-size: 11px;
-      }
-
-      .error {
-        background: #f8d7da;
-        color: #721c24;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-      }
-
-      .success {
-        background: #d4edda;
-        color: #155724;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-      }
-
-      .review-result {
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 20px;
-        margin-top: 15px;
-        animation: slideDown 0.3s ease-out;
-        overflow-x: hidden;
-        width: 100%;
-        box-sizing: border-box;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-      }
-
-      @keyframes slideDown {
-        from {
-          opacity: 0;
-          transform: translateY(-10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .review-score {
-        font-size: 1.5em;
-        font-weight: bold;
-        color: #667eea;
-        margin-bottom: 10px;
-      }
-
-      .review-summary {
-        margin-bottom: 15px;
-        color: #333;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .review-files {
-        margin-bottom: 15px;
-      }
-
-      .review-files ul {
-        margin-left: 20px;
-        margin-top: 5px;
-      }
-
-      .review-files li {
-        margin-bottom: 3px;
-      }
-
-      .review-files code {
-        background: #f8f9fa;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-size: 0.9em;
-        color: #495057;
-      }
-
-      .review-issues {
-        margin-bottom: 15px;
-      }
-
-      .issue {
-        background: white;
-        border-left: 4px solid #dc3545;
-        padding: 10px;
-        margin-bottom: 10px;
-        border-radius: 0 5px 5px 0;
-      }
-
-      .issue.high {
-        border-left-color: #ffc107;
-      }
-
-      .issue.medium {
-        border-left-color: #fd7e14;
-      }
-
-      .issue.low {
-        border-left-color: #28a745;
-      }
-
-      .issue-type {
-        font-weight: bold;
-        color: #333;
-      }
-
-      .issue-severity {
-        font-size: 0.8em;
-        color: #666;
-        margin-left: 10px;
-      }
-
-      .issue-description {
-        margin-top: 5px;
-        color: #666;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .issue-file {
-        margin-top: 5px;
-        font-size: 0.8em;
-        color: #999;
-        font-family: monospace;
-      }
-
-      .issue-code {
-        margin-top: 10px;
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 5px;
-        padding: 10px;
-      }
-
-      .issue-code pre {
-        margin: 0;
-        font-size: 0.9em;
-        color: #333;
-        overflow-x: auto;
-      }
-
-      .issue-fix {
-        margin-top: 10px;
-        background: #e8f5e8;
-        border: 1px solid #c3e6c3;
-        border-radius: 5px;
-        padding: 10px;
-        overflow-x: auto;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-      }
-
-      .issue-fix pre {
-        margin: 5px 0 0 0;
-        font-size: 0.9em;
-        color: #155724;
-        overflow-x: auto;
-      }
-
-      .review-suggestions ul {
-        margin-left: 20px;
-      }
-
-      .review-suggestions li {
-        margin-bottom: 5px;
-        color: #666;
-      }
-
-      .review-status {
-        display: inline-block;
-        padding: 4px 8px;
-        border-radius: 15px;
-        font-size: 0.8em;
-        font-weight: bold;
-        margin-bottom: 10px;
-      }
-
-      .status-reviewed {
-        background: #d4edda;
-        color: #155724;
-      }
-
-      .status-pending {
-        background: #fff3cd;
-        color: #856404;
-      }
-
-      @media (max-width: 768px) {
-        body {
-          padding: 10px;
-        }
-
-        .container {
-          margin: 0;
-          border-radius: 10px;
-          width: 100%;
-        }
-
-        .content {
-          padding: 15px;
-        }
-
-        .header {
-          padding: 20px;
-        }
-
-        .header h1 {
-          font-size: 2em;
-        }
-
-        .content {
-          padding: 20px;
-        }
-
-        .mr-header {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 10px;
-        }
-
-        .mr-actions {
-          flex-direction: column;
-        }
-      }
-    </style>
-  </head>
-  <body x-data="app()" x-init="init()">
-    <div class="container">
-      <div class="header">
-        <h1>🤖 Code Review AI</h1>
-        <p>Automatic code review with GitLab and AI</p>
+<html lang="pl" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code Review AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body x-data="app()" x-init="init()">
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10a6 6 0 0 1-6 6H8"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="15" r="2"/><path d="M6 7v10M6 9a8 8 0 0 0 8 6h2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">AI</div>
+      <span>codereview</span>
+      <small x-text="config.engine || ''"></small>
+    </div>
+
+    <div class="side-actions">
+      <button class="btn-primary-wide" @click="go('#/')"><svg class="icon"><use href="#i-dashboard"/></svg><span x-text="t('nav.overview')"></span></button>
+      <button class="btn-square" :title="t('nav.refreshProjects')" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button class="btn-square" :class="{ active: route.view === 'settings' }" :title="t('common.settings')" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
+    </div>
+
+    <div class="side-scroll">
+      <div class="side-section">
+        <span x-text="t('common.projects')"></span>
+        <span class="faint" x-text="projects.length || ''"></span>
       </div>
 
-      <div class="content">
-
-        <div class="stats">
-          <div class="stat-card">
-            <div class="stat-number" x-text="stats.totalMRs">-</div>
-            <div class="stat-label">Merge Requests</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" x-text="stats.reviewedMRs">-</div>
-            <div class="stat-label">Reviewed</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" x-text="stats.avgScore">-</div>
-            <div class="stat-label">Average Score</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" x-text="stats.totalIssues">-</div>
-            <div class="stat-label">Issues Found</div>
-          </div>
+      <template x-if="projectsLoading && !projects.length">
+        <div style="padding: 6px 12px; display: grid; gap: 10px;">
+          <div class="skeleton" style="width: 80%"></div><div class="skeleton" style="width: 60%"></div><div class="skeleton" style="width: 70%"></div>
         </div>
+      </template>
+      <template x-if="projectsError">
+        <div class="tree-empty"><span style="color: var(--red)" x-text="t('common.error', { msg: projectsError })"></span><br /><a href="#/settings" style="text-decoration: underline" x-text="t('nav.checkGitlab')"></a></div>
+      </template>
 
-        <div class="section">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; width: 100%; box-sizing: border-box;">
-            <h2 style="margin: 0; flex: 1; min-width: 200px; word-wrap: break-word;">Merge Requests</h2>
-            <button class="btn btn-success" @click="refreshMergeRequests()" :disabled="loading" style="flex-shrink: 0;">
-              <span x-show="loading" class="loading-spinner"></span>
-              <span x-show="!loading">Refresh</span>
-            </button>
+      <template x-for="p in visibleTreeProjects" :key="p.id">
+        <div class="tree-project">
+          <div class="tree-row" :class="{ selected: route.view === 'project' && route.pid === p.id }" @click="openProject(p.id)" :title="p.name_with_namespace">
+            <span class="tree-chevron" :class="{ open: expanded[p.id] || search }" @click.stop="toggleExpand(p.id)">
+              <svg class="icon icon-sm"><use href="#i-chevron"/></svg>
+            </span>
+            <span class="tree-name ellipsis" x-text="p.name"></span>
+            <span class="count-badge" :class="{ zero: !p.open_mrs }" x-text="p.open_mrs"></span>
           </div>
-          <div class="merge-requests">
-            <div x-show="loading" class="loading">Loading...</div>
-            <div x-show="!loading && mergeRequests.length === 0" class="loading">No open Merge Requests</div>
-            <template x-for="mr in mergeRequests" :key="mr.iid">
-              <div class="mr-card">
-                <div class="mr-header">
-                  <div class="mr-title" x-text="mr.title"></div>
-                  <div class="mr-id" x-text="'#' + mr.iid"></div>
-          </div>
-                <div class="mr-author" x-text="'Author: ' + mr.author.name"></div>
-                <div class="mr-branches">
-                  <div class="branch" x-text="mr.source_branch + ' → ' + mr.target_branch"></div>
-        </div>
-                <div x-show="mr.reviewed" class="review-status status-reviewed" x-text="'✓ Reviewed (' + formatDate(mr.reviewedAt) + ')'"></div>
-                <div x-show="mr.reviewing && mr.reviewProgress" class="review-status status-pending" style="margin-bottom: 8px;" x-text="'Reviewing: ' + (mr.reviewProgress.done || 0) + '/' + (mr.reviewProgress.total || 0) + ' files'"></div>
-                <div class="mr-actions">
-                  <button class="btn btn-success" @click="reviewMR(mr)" :disabled="mr.reviewed || mr.reviewing">
-                    <span x-show="!mr.reviewing" x-text="mr.reviewed ? 'Reviewed' : 'AI Review'"></span>
-                    <span x-show="mr.reviewing" class="loading-spinner"></span>
-                  </button>
-                  <button x-show="mr.reviewed" class="btn btn-secondary" @click="clearReview(mr.iid)">Clear</button>
-                  <a :href="mr.web_url" target="_blank" class="btn btn-secondary">GitLab</a>
-                </div>
-                
-                <!-- Review Section -->
-                <div x-show="mr.reviewed" class="collapsible-section">
-                  <div class="collapsible-header" @click="mr.showReview = !mr.showReview">
-                    <h4>AI Review Results</h4>
-                    <span class="collapsible-icon" x-text="mr.showReview ? '▼' : '▶'"></span>
-                  </div>
-                  <div x-show="mr.showReview" class="collapsible-content" x-html="mr.reviewResult"></div>
-                </div>
-                
-                <!-- Details Section -->
-                <div class="collapsible-section">
-                  <div class="collapsible-header" @click="viewMR(mr.iid)">
-                    <h4>Merge Request Details</h4>
-                    <div class="collapsible-header-right">
-                      <span x-show="mr.loadingDetails" class="loading-spinner" style="margin-right: 8px;"></span>
-                      <span class="collapsible-icon" x-text="mr.showDetails ? '▼' : '▶'"></span>
-                    </div>
-                  </div>
-                  <div x-show="mr.showDetails && mr.detailsResult" class="collapsible-content" x-html="mr.detailsResult"></div>
-                  <div x-show="mr.showDetails && mr.loadingDetails" class="collapsible-content">
-                    <div class="loading">Loading details...</div>
-                  </div>
-                </div>
+          <div class="tree-children" x-show="expanded[p.id] || (search && treeMRs(p.id).length)" x-cloak>
+            <template x-if="list(p.id).loading && !list(p.id).items.length"><div class="tree-empty" x-text="t('nav.loading')"></div></template>
+            <template x-if="list(p.id).error"><div class="tree-empty" style="color: var(--red)" x-text="list(p.id).error"></div></template>
+            <template x-if="list(p.id).loaded && !list(p.id).items.length"><div class="tree-empty" x-text="t('nav.noOpenMRs')"></div></template>
+            <template x-for="m in treeMRs(p.id)" :key="m.iid">
+              <div class="tree-mr" :class="{ selected: route.view === 'mr' && route.pid === p.id && route.iid === m.iid }" @click="openMR(p.id, m.iid)" :title="m.title">
+                <span class="dot" :class="status(p.id, m).dot"></span>
+                <span class="ellipsis" style="flex: 1" x-text="m.title"></span>
+                <span class="iid" x-text="'!' + m.iid"></span>
               </div>
             </template>
           </div>
         </div>
-      </div>
+      </template>
+
+      <template x-if="hiddenProjectsCount">
+        <button class="tree-more" @click="showAllProjects = true" x-text="t('nav.showProjectsWithoutMRs', { n: hiddenProjectsCount })"></button>
+      </template>
+      <template x-if="showAllProjects && !search">
+        <button class="tree-more" @click="showAllProjects = false" x-text="t('nav.hideProjectsWithoutMRs')"></button>
+      </template>
+
+      <template x-if="runningList.length">
+        <div>
+          <div class="side-section"><span x-text="t('nav.running')"></span></div>
+          <template x-for="r in runningList" :key="r.key">
+            <div class="recent-item" @click="openMR(r.pid, r.iid)">
+              <span class="dot purple pulse"></span>
+              <span class="ellipsis" style="flex: 1" x-text="r.title"></span>
+              <span class="when" x-text="elapsed(r.started_at)"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <template x-if="recentReviews.length">
+        <div>
+          <div class="side-section"><span x-text="t('common.recentReviews')"></span></div>
+          <template x-for="r in recentReviews.slice(0, 6)" :key="r.key">
+            <div class="recent-item" @click="openMR(r.pid, r.iid)">
+              <span class="dot" :class="verdict(r.verdict)?.dot || 'blue'"></span>
+              <span class="ellipsis" style="flex: 1" x-text="r.title"></span>
+              <span class="when" x-text="relTime(r.timestamp)"></span>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
 
-    <!-- Snackbar -->
-    <div x-show="snackbar.show"
-         class="snackbar"
-         :class="[snackbar.type, snackbar.show ? 'show' : '']">
-      <div class="snackbar-icon" x-text="snackbar.icon"></div>
-      <div class="snackbar-content">
-        <div class="snackbar-title" x-text="snackbar.title"></div>
-        <div class="snackbar-message" x-text="snackbar.message"></div>
+    <div class="side-footer">
+      <label class="search-box">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        <input x-ref="search" x-model="search" :placeholder="t('nav.search')" :title="t('nav.searchTitle')" />
+        <span class="kbd">Ctrl+K</span>
+      </label>
+      <div class="footer-row">
+        <span class="pill-outline" :title="t('nav.engine', { engine: (config.engine || '?') + (config.model ? ' · ' + config.model : '') })">
+          <span class="dot" :class="wsConnected ? 'green' : 'red'"></span>
+          <span class="ellipsis" x-text="(config.engine || '…') + (config.model ? ' · ' + config.model : '')"></span>
+        </span>
+        <span class="pill-outline" x-show="config.jira_enabled" :title="t('nav.jiraTitle')">jira</span>
+        <span class="pill-outline" :title="t('nav.reviewLanguage', { lang: config.language || 'pl' })" x-text="config.language || 'pl'"></span>
+        <button class="icon-btn ml-auto" :title="t('common.settings')" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
+        <button class="icon-btn mono" @click="cycleLang()" :title="t('lang.switch', { name: t('lang.name') })" x-text="lang.toUpperCase()"></button>
+        <button class="icon-btn" @click="toggleTheme()" :title="t(theme === 'dark' ? 'nav.lightTheme' : 'nav.darkTheme')">
+          <svg class="icon"><use :href="theme === 'dark' ? '#i-moon' : '#i-sun'"/></svg>
+        </button>
       </div>
-      <button class="snackbar-close" @click="hideSnackbar()">&times;</button>
     </div>
+  </aside>
 
-    <script>
-      function app() {
-        return {
-          // State
-          loading: true,
-          mergeRequests: [],
-          stats: {
-            totalMRs: '-',
-            reviewedMRs: '-',
-            avgScore: '-',
-            totalIssues: '-'
-          },
-          snackbar: {
-            show: false,
-            type: 'success',
-            icon: '✓',
-            title: '',
-            message: ''
-          },
+  <!-- ============ MAIN ============ -->
+  <main class="main">
 
-          // Initialize
-          async init() {
-            this.connectWebSocket();
-            this.showSnackbar('Application started', 'Code Review AI is ready', 'success', 3000);
-            
-            await this.loadMergeRequests();
-            await this.updateStats();
-            this.startAutoRefresh();
-          },
+    <!-- ---------- DASHBOARD ---------- -->
+    <template x-if="route.view === 'dashboard'">
+      <div style="display: contents">
+        <div class="page-head">
+          <div class="page-title" x-text="t('nav.overview')"></div>
+          <div class="head-actions">
+            <button class="btn-ghost" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg><span x-text="t('common.refresh')"></span></button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="tiles">
+            <div class="tile"><div class="label" x-text="t('common.projects')"></div><div class="value" x-text="projects.length"></div></div>
+            <div class="tile"><div class="label" x-text="t('common.openMRs')"></div><div class="value" x-text="totalOpen"></div></div>
+            <div class="tile"><div class="label" x-text="t('dash.runningReviews')"></div><div class="value" x-text="runningList.length"></div></div>
+            <div class="tile"><div class="label" x-text="t('dash.doneReviews')"></div><div class="value" x-text="recentReviews.length"></div></div>
+          </div>
 
-          connectWebSocket() {
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${location.host}/api/v1/ws`;
-            try {
-              this.ws = new WebSocket(wsUrl);
-              this.ws.onmessage = (e) => this.handleWSMessage(e);
-              this.ws.onclose = () => {
-                console.log('[WS] Disconnected, reconnecting in 5s...');
-                setTimeout(() => this.connectWebSocket(), 5000);
-              };
-              this.ws.onerror = () => {};
-            } catch (err) {
-              console.warn('[WS] Connection failed:', err);
-              setTimeout(() => this.connectWebSocket(), 5000);
-            }
-          },
+          <div class="section-title" x-text="t('common.projects')"></div>
+          <div class="table-card">
+            <table class="grid">
+              <thead><tr><th x-text="t('common.project')"></th><th class="hide-md" x-text="t('dash.defaultBranch')"></th><th class="num" x-text="t('common.openMRs')"></th><th class="num" x-text="t('dash.activity')"></th></tr></thead>
+              <tbody>
+                <template x-if="projectsLoading && !projects.length">
+                  <tr><td colspan="4"><div class="skeleton" style="width: 40%"></div></td></tr>
+                </template>
+                <template x-for="p in projects" :key="p.id">
+                  <tr @click="openProject(p.id)">
+                    <td>
+                      <div class="mr-title"><span class="t" x-text="p.name"></span></div>
+                      <div class="faint mono" style="margin-top: 2px" x-text="p.path_with_namespace"></div>
+                    </td>
+                    <td class="hide-md"><span class="branch" x-text="p.default_branch || '—'"></span></td>
+                    <td class="num"><span class="count-badge" :class="{ zero: !p.open_mrs }" x-text="p.open_mrs"></span></td>
+                    <td class="num faint" x-text="relTime(p.last_activity_at)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <template x-if="!projectsLoading && !projects.length && !projectsError">
+              <div class="empty"><h3 x-text="t('dash.noProjects')"></h3><span x-text="t('dash.noProjectsText')"></span><br /><a class="btn-primary" href="#/settings" x-text="t('dash.openSettings')"></a></div>
+            </template>
+            <template x-if="projectsError">
+              <div class="empty"><h3 x-text="t('dash.gitlabFailed')"></h3><span x-text="projectsError"></span><br /><a class="btn-primary" href="#/settings" x-text="t('dash.configureGitlab')"></a></div>
+            </template>
+          </div>
 
-          handleWSMessage(e) {
-            try {
-              const msg = JSON.parse(e.data);
-              if (msg.type === 'review' && msg.mr_id != null && msg.review) {
-                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
-                if (mr) {
-                  mr.reviewed = true;
-                  mr.reviewedAt = new Date().toISOString();
-                  mr.reviewResult = this.createReviewResultHTML(msg.review);
-                  mr.showReview = true;
-                  mr.reviewing = false;
-                  mr.reviewProgress = null;
-                  this.saveReviewResult(msg.mr_id, msg.review);
-                  this.scheduleStatsUpdate();
-                  const issueCount = (msg.review.issues || []).length;
-                  this.showSnackbar('Review completed', `MR #${msg.mr_id} analyzed - ${issueCount} issue${issueCount !== 1 ? 's' : ''} found`, 'success');
-                  if (typeof Prism !== 'undefined') setTimeout(() => Prism.highlightAll(), 100);
-                }
-              } else if (msg.type === 'review_part' && msg.mr_id != null) {
-                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
-                if (mr) {
-                  mr.reviewProgress = mr.reviewProgress || { done: 0, total: msg.total_files || 1 };
-                  mr.reviewProgress.done = (mr.reviewProgress.done || 0) + 1;
-                  mr.reviewProgress.total = msg.total_files || mr.reviewProgress.total;
-                }
-              } else if (msg.type === 'review_error' && msg.mr_id != null) {
-                const mr = this.mergeRequests.find(m => m.iid === msg.mr_id);
-                if (mr) {
-                  mr.reviewing = false;
-                  mr.reviewProgress = null;
-                }
-                this.showSnackbar('Review error', msg.message || msg.error || 'AI review failed', 'error');
-              }
-            } catch (err) {
-              console.warn('[WS] Message parse error:', err);
-            }
-          },
+          <template x-if="recentReviews.length">
+            <div>
+              <div class="section-title" x-text="t('common.recentReviews')"></div>
+              <div class="table-card">
+                <table class="grid">
+                  <thead><tr><th x-text="t('dash.verdict')"></th><th>Merge request</th><th class="hide-md" x-text="t('common.project')"></th><th class="num" x-text="t('common.score')"></th><th class="num" x-text="t('dash.when')"></th></tr></thead>
+                  <tbody>
+                    <template x-for="r in recentReviews.slice(0, 12)" :key="r.key">
+                      <tr @click="openMR(r.pid, r.iid)">
+                        <td><span class="status-pill"><span class="dot" :class="verdict(r.verdict)?.dot || 'blue'"></span><span x-text="verdict(r.verdict)?.short || t('status.reviewed')"></span></span></td>
+                        <td><div class="mr-title"><span class="t" x-text="r.title"></span><span class="faint mono" x-text="'!' + r.iid"></span></div></td>
+                        <td class="hide-md muted" x-text="project(r.pid)?.name || r.pid"></td>
+                        <td class="num" x-text="r.score ? r.score + '/10' : '—'"></td>
+                        <td class="num faint" x-text="relTime(r.timestamp)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
 
-          // API calls
-          async loadMergeRequests() {
-            try {
-              this.loading = true;
-              // Save current view states before refresh
-              const currentStates = {};
-              this.mergeRequests.forEach(mr => {
-                currentStates[mr.iid] = {
-                  showDetails: mr.showDetails,
-                  showReview: mr.showReview,
-                  detailsResult: mr.detailsResult,
-                  reviewResult: mr.reviewResult
-                };
-              });
-              
-              this.showSnackbar('Loading', 'Fetching Merge Requests...', 'info', 2000);
-              const response = await fetch('/api/v1/merge-requests?state=opened');
-              if (!response.ok) throw new Error('Error fetching MRs');
-              const data = await response.json();
-              
-              this.mergeRequests = data.merge_requests.map(mr => {
-                // Restore view states from before refresh
-                const savedState = currentStates[mr.iid] || {};
-                return {
-                  ...mr,
-                  reviewed: false,
-                  reviewing: false,
-                  reviewedAt: null,
-                  reviewResult: savedState.reviewResult || '',
-                  reviewProgress: null,
-                  showDetails: savedState.showDetails || false,
-                  detailsResult: savedState.detailsResult || '',
-                  showReview: savedState.showReview || false,
-                  loadingDetails: false
-                };
-              });
-              
-              this.loadReviewResults();
-              this.showSnackbar('Loaded', `Fetched ${data.merge_requests.length} Merge Requests`, 'success', 3000);
-            } catch (error) {
-              this.showSnackbar('Loading error', 'Failed to load Merge Requests: ' + error.message, 'error');
-            } finally {
-              this.loading = false;
-            }
-          },
+    <!-- ---------- PROJECT: MR LIST ---------- -->
+    <template x-if="route.view === 'project'">
+      <div style="display: contents">
+        <div class="page-head">
+          <div class="page-title ellipsis" x-text="currentProject?.name || t('list.projectN', { pid: route.pid })"></div>
+          <div class="segmented">
+            <button :class="{ on: listState === 'opened' }" @click="setListState('opened')"><span x-text="t('list.opened')"></span> <span class="n" x-text="list(route.pid, 'opened').items.length"></span></button>
+            <button :class="{ on: listState === 'merged' }" @click="setListState('merged')" x-text="t('list.merged')"></button>
+            <button :class="{ on: listState === 'closed' }" @click="setListState('closed')" x-text="t('list.closed')"></button>
+          </div>
+          <div class="head-actions">
+            <label class="search-box head-search">
+              <svg class="icon icon-sm"><use href="#i-search"/></svg>
+              <input x-model="listQuery" :placeholder="t('list.search')" />
+            </label>
+            <button class="btn-ghost" @click="refreshCurrent()"><svg class="icon"><use href="#i-refresh"/></svg><span class="hide-md" x-text="t('common.refresh')"></span></button>
+            <a class="btn-ghost" :href="currentProject?.web_url + '/-/merge_requests'" target="_blank" rel="noopener" x-show="currentProject"><svg class="icon"><use href="#i-external"/></svg><span class="hide-md">GitLab</span></a>
+          </div>
+        </div>
+        <div class="content">
+          <div class="table-card">
+            <table class="grid fixed">
+              <colgroup><col style="width: 160px" /><col /><col class="hide-md" style="width: 280px" /><col class="hide-md" style="width: 160px" /><col style="width: 76px" /><col style="width: 112px" /><col style="width: 128px" /></colgroup>
+              <thead>
+                <tr><th x-text="t('list.status')"></th><th>Merge request</th><th class="hide-md" x-text="t('common.branches')"></th><th class="hide-md" x-text="t('common.author')"></th><th class="num" x-text="t('common.score')"></th><th class="num" x-text="t('list.issues')"></th><th class="num" x-text="t('list.updated')"></th></tr>
+              </thead>
+              <tbody>
+                <template x-for="n in (list(route.pid, listState).loading && !list(route.pid, listState).items.length ? 5 : 0)" :key="'sk' + n">
+                  <tr><td colspan="7"><div class="skeleton" :style="'width:' + (40 + n * 9) + '%'"></div></td></tr>
+                </template>
+                <template x-for="m in currentList" :key="m.iid">
+                  <tr @click="openMR(route.pid, m.iid)">
+                    <td><span class="status-pill"><span class="dot" :class="status(route.pid, m).dot"></span><span x-text="status(route.pid, m).label"></span></span></td>
+                    <td>
+                      <div class="mr-title"><span class="t" x-text="m.title"></span><span class="faint mono" x-text="'!' + m.iid"></span></div>
+                      <div class="mr-sub" x-show="m.draft || m.has_conflicts || m.labels.length">
+                        <span class="chip draft" x-show="m.draft">draft</span>
+                        <span class="chip danger" x-show="m.has_conflicts" x-text="t('common.conflicts')"></span>
+                        <template x-for="l in m.labels.slice(0, 4)" :key="l"><span class="chip label" x-text="l"></span></template>
+                      </div>
+                    </td>
+                    <td class="hide-md"><div class="branches" :title="m.source_branch + ' → ' + m.target_branch"><span class="branch" x-text="m.source_branch"></span><span class="faint">→</span><span class="branch" x-text="m.target_branch"></span></div></td>
+                    <td class="hide-md muted ellipsis" x-text="m.author?.name"></td>
+                    <td class="num" x-text="review(route.pid, m.iid)?.score ? review(route.pid, m.iid).score + '/10' : '—'"></td>
+                    <td class="num">
+                      <template x-if="review(route.pid, m.iid)">
+                        <span class="issue-dots">
+                          <span x-show="severityCounts(review(route.pid, m.iid)).critical + severityCounts(review(route.pid, m.iid)).high" class="del"><span class="dot red"></span><span x-text="severityCounts(review(route.pid, m.iid)).critical + severityCounts(review(route.pid, m.iid)).high"></span></span>
+                          <span x-show="severityCounts(review(route.pid, m.iid)).medium" style="color: var(--yellow)"><span class="dot yellow"></span><span x-text="severityCounts(review(route.pid, m.iid)).medium"></span></span>
+                          <span x-show="severityCounts(review(route.pid, m.iid)).low" class="muted"><span class="dot blue"></span><span x-text="severityCounts(review(route.pid, m.iid)).low"></span></span>
+                          <span x-show="!(review(route.pid, m.iid).issues || []).length" class="add">0</span>
+                        </span>
+                      </template>
+                      <template x-if="!review(route.pid, m.iid)"><span class="faint">—</span></template>
+                    </td>
+                    <td class="num faint" x-text="relTime(m.updated_at)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <template x-if="list(route.pid, listState).error">
+              <div class="empty"><h3 x-text="t('common.fetchMRFailed')"></h3><span x-text="list(route.pid, listState).error"></span></div>
+            </template>
+            <template x-if="list(route.pid, listState).loaded && !currentList.length">
+              <div class="empty"><h3 x-text="t(listQuery ? 'list.noResults' : 'list.noMRs')"></h3><span x-show="!listQuery" x-text="t('list.noMRsText')"></span></div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
 
-          async updateStats() {
-            try {
-              // Pobierz podstawowe statystyki z serwera
-              const response = await fetch('/api/v1/stats');
-              if (!response.ok) throw new Error('Error fetching stats');
-              const data = await response.json();
-              
-              // Pobierz recenzje z localStorage
-              const reviewResults = this.getReviewResults();
-              const reviewedCount = Object.keys(reviewResults).length;
-              
-              // Oblicz średnią ocenę
-              const scores = Object.values(reviewResults).map(r => r.score);
-              const avgScore = scores.length > 0 
-                ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
-                : '-';
-              
-              // Oblicz łączne problemy
-              const totalIssues = Object.values(reviewResults).reduce(
-                (sum, r) => sum + (r.issues ? r.issues.length : 0), 0
-              );
-              
-              // Aktualizuj statystyki bez re-renderowania
-              this.stats.totalMRs = data.totalMRs;
-              this.stats.reviewedMRs = reviewedCount;
-              this.stats.avgScore = avgScore;
-              this.stats.totalIssues = totalIssues;
-            } catch (error) {
-              console.error('Error updating stats:', error);
-            }
-          },
+    <!-- ---------- MR DETAIL ---------- -->
+    <template x-if="route.view === 'mr'">
+      <div style="display: contents">
+        <template x-if="detailLoading && !detail">
+          <div class="content"><div class="skeleton" style="width: 40%; height: 22px"></div><div class="skeleton" style="width: 60%; margin-top: 14px"></div></div>
+        </template>
+        <template x-if="detailError && !detail">
+          <div class="content"><div class="empty"><h3 x-text="t('common.fetchMRFailed')"></h3><span x-text="detailError"></span></div></div>
+        </template>
 
-          async viewMR(iid) {
-            try {
-              const mr = this.mergeRequests.find(m => m.iid === iid);
-              if (!mr) return;
+        <template x-if="detail">
+          <div style="display: contents">
+            <div class="mr-head">
+              <div class="mr-head-top">
+                <div style="min-width: 0; flex: 1">
+                  <h1 x-text="detail.mr.title"></h1>
+                  <div class="mr-meta">
+                    <span class="mono-chip" x-text="'!' + detail.mr.iid"></span>
+                    <span class="muted" x-text="currentProject?.name"></span>
+                    <span class="sep">·</span>
+                    <span x-text="detail.mr.author?.name"></span>
+                    <span class="sep">·</span>
+                    <span class="branch" x-text="detail.mr.source_branch"></span><span class="faint">→</span><span class="branch" x-text="detail.mr.target_branch"></span>
+                    <span class="sep">·</span>
+                    <span class="mono"><span class="add" x-text="'+' + detail.add"></span> <span class="del" x-text="'−' + detail.del"></span></span>
+                    <span class="sep">·</span>
+                    <span class="faint" x-text="t('mr.updated', { when: relTime(detail.mr.updated_at) })"></span>
+                    <span class="chip draft" x-show="detail.mr.draft">draft</span>
+                    <span class="chip danger" x-show="detail.mr.has_conflicts" x-text="t('common.conflicts')"></span>
+                    <span class="chip warn" x-show="status(detail.pid, detail.mr).outdated" :title="t('mr.newCommitsTitle')" x-text="t('mr.newCommits')"></span>
+                  </div>
+                </div>
+                <span class="status-pill"><span class="dot" :class="status(detail.pid, detail.mr).dot"></span><span x-text="status(detail.pid, detail.mr).label"></span></span>
+              </div>
 
-              mr.showDetails = !mr.showDetails;
-              if (mr.showDetails && !mr.detailsResult) {
-                mr.loadingDetails = true;
-                try {
-                  const response = await fetch(`/api/v1/merge-requests/${iid}`);
-                  const data = await response.json();
-                  
-                  // Get review from localStorage if available
-                  const reviewResults = this.getReviewResults();
-                  const review = reviewResults[iid] || null;
-                  
-                  mr.detailsResult = this.createMRDetailsHTML(data, review);
-                } finally {
-                  mr.loadingDetails = false;
-                }
-              }
-            } catch (error) {
-              mr.loadingDetails = false;
-              this.showSnackbar('Details error', 'Failed to fetch MR details: ' + error.message, 'error');
-            }
-          },
+              <div class="tabs-row">
+                <div class="tabs">
+                  <button class="tab" :class="{ on: route.tab === 'review' }" @click="setTab('review')">Review <span class="n" x-show="currentReview" x-text="(currentReview?.issues || []).length"></span></button>
+                  <button class="tab" :class="{ on: route.tab === 'changes' }" @click="setTab('changes')"><span x-text="t('mr.tabChanges')"></span> <span class="n" x-text="detail.files.length"></span></button>
+                  <button class="tab" :class="{ on: route.tab === 'description' }" @click="setTab('description')" x-text="t('mr.tabDescription')"></button>
+                </div>
+                <div class="head-actions">
+                  <button class="btn-primary" @click="startReview(detail.pid, detail.iid)" :disabled="!!currentRunning">
+                    <template x-if="currentRunning"><span class="spinner" style="border-top-color: var(--primary-text)"></span></template>
+                    <template x-if="!currentRunning"><svg class="icon icon-sm" style="fill: currentColor"><use href="#i-play"/></svg></template>
+                    <span x-text="t(currentRunning ? 'mr.analyzing' : (currentReview ? 'mr.rerun' : 'common.runReview'))"></span>
+                  </button>
+                  <a class="btn-outline" :href="detail.mr.web_url" target="_blank" rel="noopener"><svg class="icon icon-sm"><use href="#i-external"/></svg>GitLab</a>
+                  <button class="btn-ghost danger" x-show="currentReview && !currentRunning" @click="clearReview(detail.pid, detail.iid)" :title="t('mr.deleteTitle')"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+                </div>
+              </div>
 
-          async reviewMR(mr) {
-            try {
-              mr.reviewing = true;
-              const response = await fetch(`/api/v1/merge-requests/${mr.iid}/review`, {
-                method: 'POST'
-              });
-              
-              if (!response.ok) throw new Error('Review error');
-              const data = await response.json();
-              
-              if (response.status === 202) {
-                mr.reviewProgress = { done: 0, total: data.total_files || 1 };
-                this.showSnackbar('Review started', `MR #${mr.iid} - analyzing ${data.total_files || '?'} files in parallel`, 'info', 4000);
-              } else {
-                mr.reviewed = true;
-                mr.reviewedAt = new Date().toISOString();
-                mr.reviewResult = this.createReviewResultHTML(data.review);
-                mr.showReview = true;
-                this.saveReviewResult(mr.iid, data.review);
-                this.scheduleStatsUpdate();
-                this.showSnackbar('Review completed', `MR #${mr.iid} has been analyzed by AI`, 'success');
-                if (typeof Prism !== 'undefined') setTimeout(() => Prism.highlightAll(), 100);
-              }
-            } catch (error) {
-              mr.reviewing = false;
-              this.showSnackbar('Review error', 'Failed to start MR review: ' + error.message, 'error');
-            }
-          },
+              <template x-if="currentRunning">
+                <div class="progress">
+                  <span class="dot purple pulse"></span>
+                  <b x-text="t((currentRunning.engine || config.engine) === 'claude-code' ? 'mr.agentAnalyzing' : 'mr.analyzingFiles')"></b>
+                  <span class="faint" x-show="(currentRunning.engine || config.engine) !== 'claude-code' && currentRunning.total" x-text="t('mr.fileProgress', { done: currentRunning.done || 0, total: currentRunning.total })"></span>
+                  <span class="faint" x-show="(currentRunning.engine || config.engine) === 'claude-code'" x-text="t('mr.agentProgress', { files: currentRunning.total ? tn('common.files', currentRunning.total) : '?' })"></span>
+                  <div class="bar" :class="{ indeterminate: (currentRunning.engine || config.engine) === 'claude-code' || !currentRunning.total }">
+                    <i :style="currentRunning.total ? 'width:' + Math.round(100 * (currentRunning.done || 0) / currentRunning.total) + '%' : ''"></i>
+                  </div>
+                  <span class="mono faint" x-text="elapsed(currentRunning.started_at)"></span>
+                </div>
+              </template>
+            </div>
 
-          async clearReview(iid) {
-            const mr = this.mergeRequests.find(m => m.iid === iid);
-            if (mr) {
-              mr.reviewed = false;
-              mr.reviewedAt = null;
-              mr.reviewResult = '';
-            }
-            this.clearReviewResult(iid);
-            this.scheduleStatsUpdate();
-            this.showSnackbar('Review cleared', `Review for MR #${iid} has been cleared`, 'info');
-          },
+            <div class="content">
+              <!-- REVIEW TAB -->
+              <template x-if="route.tab === 'review'">
+                <div class="detail-body">
+                  <template x-if="currentError && !currentRunning">
+                    <div class="card" style="border-color: color-mix(in srgb, var(--red) 45%, var(--border))">
+                      <h3 class="del" x-text="t('mr.lastFailed')"></h3>
+                      <div class="mono muted" style="white-space: pre-wrap" x-text="currentError"></div>
+                    </div>
+                  </template>
 
-          // Snackbar functions
-          showSnackbar(title, message, type = 'success', duration = 5000) {
-            const icons = {
-              success: '✓',
-              error: '✗',
-              warning: '⚠',
-              info: 'ℹ'
-            };
-            
-            console.log('Showing snackbar:', { title, message, type });
-            
-            this.snackbar = {
-              show: true,
-              type: type,
-              icon: icons[type] || '✓',
-              title: title,
-              message: message
-            };
-            
-            if (duration > 0) {
-              setTimeout(() => {
-                this.hideSnackbar();
-              }, duration);
-            }
-          },
+                  <template x-if="!currentReview && !currentRunning">
+                    <div class="card"><div class="empty">
+                      <h3 x-text="t('mr.noReview')"></h3>
+                      <span x-text="t(config.engine === 'claude-code' ? 'mr.noReviewAgent' : 'mr.noReviewLLM')"></span><br />
+                      <button class="btn-primary" @click="startReview(detail.pid, detail.iid)"><svg class="icon icon-sm" style="fill: currentColor"><use href="#i-play"/></svg><span x-text="t('common.runReview')"></span></button>
+                    </div></div>
+                  </template>
 
-          hideSnackbar() {
-            this.snackbar.show = false;
-          },
-
-          // Helper functions
-          showMessage(message, type = 'success') {
-            const titles = {
-              success: 'Success',
-              error: 'Error',
-              warning: 'Warning',
-              info: 'Information'
-            };
-            this.showSnackbar(titles[type] || 'Information', message, type);
-          },
-
-          formatDate(dateString) {
-            return new Date(dateString).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          },
-
-          createReviewResultHTML(review) {
-            const issuesHtml = review.issues.map(issue => {
-              const typeClass = issue.type === 'refactoring' ? 'refactoring' : '';
-              return `
-                <div class="issue ${issue.severity.toLowerCase()}">
+                  <template x-if="currentReview">
                     <div>
-                        <span class="issue-type ${typeClass}">${issue.type}</span>
-                        <span class="issue-severity">(${issue.severity})</span>
+                      <div class="verdict" :class="currentReview.verdict">
+                        <div class="v-icon" x-text="verdict(currentReview.verdict)?.icon || '🤖'"></div>
+                        <div style="min-width: 0">
+                          <div class="v-title" x-text="verdict(currentReview.verdict)?.label || t('mr.reviewDone')"></div>
+                          <div class="v-sub">
+                            <span x-text="t('mr.reviewFrom', { date: fullDate(currentReview.timestamp) })"></span>
+                            <span x-show="reqSummary(currentReview.requirements)" x-text="t('mr.requirements', { summary: reqSummary(currentReview.requirements) })"></span>
+                            <span x-show="currentReview.engine" x-text="' · ' + currentReview.engine"></span>
+                            <span x-show="!viewingOldReview && status(detail.pid, detail.mr).outdated" class="del" x-text="t('mr.newCommitsSince')"></span>
+                            <span x-show="viewingOldReview" class="del"><span x-text="t('mr.olderVersion')"></span><a href="#" @click.prevent="historyPick = null" style="text-decoration: underline" x-text="t('mr.showLatest')"></a></span>
+                          </div>
+                        </div>
+                        <div class="score"><b x-text="currentReview.score || '—'"></b><span>/10</span></div>
+                      </div>
+
+                      <div class="card">
+                        <h3 x-text="t('mr.summary')"></h3>
+                        <div class="md" x-html="md(currentReview.summary)"></div>
+                      </div>
+
+                      <template x-if="(currentReview.requirements || []).length">
+                        <div class="card">
+                          <h3><svg class="icon icon-sm"><use href="#i-list"/></svg><span x-text="t('mr.requirementsTitle')"></span> <span class="faint" x-text="'· ' + reqSummary(currentReview.requirements)"></span></h3>
+                          <table class="req"><tbody>
+                            <template x-for="(rq, i) in currentReview.requirements" :key="i">
+                              <tr><td x-text="reqIcon(rq.status)"></td><td x-text="rq.requirement"></td><td class="ev" x-text="rq.evidence"></td></tr>
+                            </template>
+                          </tbody></table>
+                        </div>
+                      </template>
+
+                      <template x-if="currentReview.followup && (currentReview.followup.items || []).length">
+                        <div class="card">
+                          <h3><span x-text="t('mr.reReview')"></span> <span class="faint" x-text="t('mr.reReviewSince', { sha: (currentReview.followup.since_sha || '').slice(0, 8), summary: followupSummary(currentReview.followup) })"></span></h3>
+                          <table class="req"><tbody>
+                            <template x-for="it in currentReview.followup.items" :key="it.id">
+                              <tr>
+                                <td :title="followupLabel(it.status)" x-text="followupIcon(it.status)"></td>
+                                <td>
+                                  <div x-text="(it.description || '').split('\n')[0]"></div>
+                                  <div class="faint" x-show="it.comment" x-text="it.comment"></div>
+                                </td>
+                                <td class="ev">
+                                  <a x-show="it.url" :href="it.url" target="_blank" rel="noopener" x-text="it.file + ':' + it.line"></a>
+                                  <span x-show="!it.url" x-text="it.file + ':' + it.line"></span>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody></table>
+                        </div>
+                      </template>
+
+                      <div class="card-grid" x-show="currentReview.security_summary || currentReview.quality_summary" style="margin-bottom: 14px">
+                        <div class="card" x-show="currentReview.security_summary">
+                          <h3><svg class="icon icon-sm"><use href="#i-shield"/></svg><span x-text="t('mr.security')"></span></h3>
+                          <div class="md" x-html="md(currentReview.security_summary)"></div>
+                        </div>
+                        <div class="card" x-show="currentReview.quality_summary">
+                          <h3><svg class="icon icon-sm"><use href="#i-bolt"/></svg><span x-text="t('mr.quality')"></span></h3>
+                          <div class="md" x-html="md(currentReview.quality_summary)"></div>
+                        </div>
+                      </div>
+
+                      <div class="section-title" style="margin-top: 8px" x-text="t('mr.issues')"></div>
+                      <div class="filters">
+                        <button class="filter" :class="{ on: issueFilter === 'all' }" @click="issueFilter = 'all'"><span x-text="t('mr.all')"></span> <span class="mono" x-text="(currentReview.issues || []).length"></span></button>
+                        <template x-for="s in ['critical', 'high', 'medium', 'low']" :key="s">
+                          <button class="filter" :class="{ on: issueFilter === s }" @click="issueFilter = s" x-show="severityCounts(currentReview)[s]">
+                            <span class="sev" :class="s" x-text="s"></span><span class="mono" x-text="severityCounts(currentReview)[s]"></span>
+                          </button>
+                        </template>
+                      </div>
+                      <template x-if="!(currentReview.issues || []).length">
+                        <div class="card"><div class="empty" style="padding: 24px"><h3 x-text="t('mr.noIssues')"></h3><span x-text="t('mr.noIssuesText')"></span></div></div>
+                      </template>
+                      <template x-for="g in issueGroups" :key="g.file">
+                        <div class="file-group">
+                          <div class="file-group-head">
+                            <svg class="icon icon-sm"><use :href="g.file ? '#i-file' : '#i-list'"/></svg>
+                            <span x-text="g.file || t('mr.generalIssues')"></span>
+                            <span class="faint" x-text="'· ' + g.issues.length"></span>
+                          </div>
+                          <template x-for="(i, idx) in g.issues" :key="idx">
+                            <div @click="gotoIssue(i)" :style="i.file && i.line ? 'cursor: pointer' : ''" :title="i.file && i.line ? t('mr.showInChanges') : ''" x-html="issueCardHTML(i, true)"></div>
+                          </template>
+                        </div>
+                      </template>
+
+                      <template x-if="history.length > 1">
+                        <div class="card" style="margin-top: 8px">
+                          <h3><svg class="icon icon-sm"><use href="#i-history"/></svg><span x-text="t('mr.history')"></span> <span class="faint" x-text="'· ' + history.length"></span></h3>
+                          <div class="history">
+                            <template x-for="(h, hi) in history" :key="h.id">
+                              <button class="history-item" :class="{ on: (historyPick || history[0].id) === h.id }" @click="historyPick = hi === 0 ? null : h.id; issueFilter = 'all'">
+                                <span class="dot" :class="verdict(h.verdict)?.dot || 'blue'"></span>
+                                <span x-text="verdict(h.verdict)?.short || t('status.reviewed')"></span>
+                                <span class="mono faint" x-text="(h.score || '—') + '/10'"></span>
+                                <span class="faint" x-text="fullDate(h.timestamp)"></span>
+                                <span class="mono faint ml-auto" x-text="(h.sha || '').slice(0, 8)"></span>
+                              </button>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+
+                      <template x-if="(currentReview.suggestions || []).length">
+                        <div class="card" style="margin-top: 8px">
+                          <h3 x-text="t('mr.suggestions')"></h3>
+                          <div class="md"><ul><template x-for="(s, i) in currentReview.suggestions" :key="i"><li x-html="md(s)"></li></template></ul></div>
+                        </div>
+                      </template>
                     </div>
-                    <div class="issue-description">${issue.description}</div>
-                ${issue.file ? `<div class="issue-file">File: ${issue.file}:${issue.line}</div>` : ''}
-                ${issue.code ? `<div class="issue-code"><pre><code>${issue.code}</code></pre></div>` : ''}
-                ${issue.fix ? `<div class="issue-fix"><strong>Suggested fix:</strong><pre><code>${issue.fix}</code></pre></div>` : ''}
+                  </template>
                 </div>
-            `;
-            }).join('');
+              </template>
 
-            const suggestionsHtml = review.suggestions.map(s => `<li>${s}</li>`).join('');
-
-        return `
-                <div class="review-result">
-                    <div class="review-score">Score: ${review.score}/10</div>
-                    <div class="review-summary">${review.summary}</div>
-                    <div class="review-files">
-                        <h4>Analyzed files:</h4>
-                        <ul>
-                    ${Array.from(new Set(review.issues.map(issue => issue.file).filter(f => f)))
-                      .map(file => `<li><code>${file}</code></li>`).join('')}
-                        </ul>
-                    </div>
-                    <div class="review-issues">
-                        <h4>Issues found (${review.issues.length}):</h4>
-                        ${issuesHtml}
-                    </div>
-                    <div class="review-suggestions">
-                        <h4>Suggestions:</h4>
-                        <ul>${suggestionsHtml}</ul>
-                    </div>
-                </div>
-            `;
-          },
-
-          createMRDetailsHTML(data, review = null) {
-            // Group issues by file
-            const issuesByFile = {};
-            if (review && review.issues) {
-              review.issues.forEach(issue => {
-                if (issue.file) {
-                  if (!issuesByFile[issue.file]) {
-                    issuesByFile[issue.file] = [];
-                  }
-                  issuesByFile[issue.file].push(issue);
-                }
-              });
-            }
-
-            return `
-              <div class="mr-details">
-                <h3>Merge Request Details</h3>
-                <div style="margin-bottom: 20px;">
-                  <p><strong>Title:</strong> ${data.merge_request.title}</p>
-                  <p><strong>Description:</strong> ${data.merge_request.description}</p>
-                  <p><strong>Author:</strong> ${data.merge_request.author.name}</p>
-                  <p><strong>Source Branch:</strong> ${data.merge_request.source_branch}</p>
-                  <p><strong>Target Branch:</strong> ${data.merge_request.target_branch}</p>
-                  <p><strong>Created:</strong> ${data.merge_request.created_at}</p>
-                  <p><strong>Updated:</strong> ${data.merge_request.updated_at}</p>
-                </div>
-                ${data.diffs && data.diffs.length > 0 ? `
-                  <h4>Changes (${data.diff_count} files):</h4>
-                  ${data.diffs.map(diff => {
-                    const fileIssues = issuesByFile[diff.new_path] || [];
-                    return `
-                    <div class="diff-container">
-                      <div class="diff-header">
-                        <span class="diff-file-name">${diff.new_path}</span>
-                        <span class="diff-stats">
-                          ${diff.new_file ? 'New file' : diff.deleted_file ? 'Deleted file' : diff.renamed_file ? 'Renamed file' : 'Modified file'}
-                          ${fileIssues.length > 0 ? ` • ${fileIssues.length} issue${fileIssues.length > 1 ? 's' : ''}` : ''}
+              <!-- CHANGES TAB -->
+              <template x-if="route.tab === 'changes'">
+                <div class="changes">
+                  <div class="file-tree">
+                    <div class="ft-summary"><span x-text="tn('common.files', detail.files.length)"></span> · <span class="add mono" x-text="'+' + detail.add"></span> <span class="del mono" x-text="'−' + detail.del"></span></div>
+                    <template x-for="(f, fi) in detail.files" :key="fi">
+                      <div class="ft-item" @click="gotoFile(fi)" :title="f.new_path">
+                        <svg class="icon icon-sm faint"><use href="#i-file"/></svg>
+                        <span class="ellipsis" x-text="f.new_path.split('/').pop()"></span>
+                        <span class="stats">
+                          <span class="issues" x-show="fileIssues(f.new_path).length" x-text="fileIssues(f.new_path).length"></span>
+                          <span class="add" x-text="'+' + f.add"></span><span class="del" x-text="'−' + f.del"></span>
                         </span>
                       </div>
-                      <div class="diff-content">
-                        ${this.formatDiff(diff.diff, diff.new_path, fileIssues)}
+                    </template>
+                  </div>
+                  <div style="min-width: 0">
+                    <template x-if="!detail.files.length"><div class="card"><div class="empty" x-text="t('mr.noChanges')"></div></div></template>
+                    <template x-for="(f, fi) in detail.files" :key="fi">
+                      <div class="diff-file" :id="'f-' + fi">
+                        <div class="diff-file-head" @click="collapsed[fi] = !collapsed[fi]">
+                          <span class="tree-chevron" :class="{ open: !collapsed[fi] }"><svg class="icon icon-sm"><use href="#i-chevron"/></svg></span>
+                          <span class="path ellipsis" x-text="f.new_path"></span>
+                          <span class="chip ok" x-show="f.new_file" x-text="t('mr.newFile')"></span>
+                          <span class="chip danger" x-show="f.deleted_file" x-text="t('mr.deletedFile')"></span>
+                          <span class="chip" x-show="f.renamed_file" x-text="t('mr.renamedFrom', { path: f.old_path })"></span>
+                          <span class="stats">
+                            <span class="del" x-show="fileIssues(f.new_path).length" x-text="tn('common.issues', fileIssues(f.new_path).length)"></span>
+                            <span class="add" x-text="'+' + f.add"></span><span class="del" x-text="'−' + f.del"></span>
+                          </span>
+                        </div>
+                        <div x-show="!collapsed[fi]" x-html="diffHTML(fi)"></div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- DESCRIPTION TAB -->
+              <template x-if="route.tab === 'description'">
+                <div class="detail-body">
+                  <div class="card">
+                    <h3 x-text="t('mr.descriptionTitle')"></h3>
+                    <div class="md" x-show="detail.mr.description" x-html="md(detail.mr.description)"></div>
+                    <div class="faint" x-show="!detail.mr.description" x-text="t('mr.noDescription')"></div>
+                  </div>
+                  <div class="card">
+                    <h3 x-text="t('mr.info')"></h3>
+                    <dl class="info-grid">
+                      <dt x-text="t('common.author')"></dt><dd x-text="detail.mr.author?.name + (detail.mr.author?.username ? ' (@' + detail.mr.author.username + ')' : '')"></dd>
+                      <dt x-text="t('common.branches')"></dt><dd><span class="branch" x-text="detail.mr.source_branch"></span> → <span class="branch" x-text="detail.mr.target_branch"></span></dd>
+                      <dt x-text="t('mr.mergeStatus')"></dt><dd x-text="mergeStatus(detail.mr.detailed_merge_status)"></dd>
+                      <dt>Pipeline</dt><dd x-text="detail.mr.pipeline_status || '—'"></dd>
+                      <dt x-text="t('mr.comments')"></dt><dd x-text="detail.mr.user_notes_count"></dd>
+                      <dt x-text="t('mr.labels')"></dt><dd><template x-for="l in detail.mr.labels" :key="l"><span class="chip label" style="margin-right: 4px" x-text="l"></span></template><span class="faint" x-show="!detail.mr.labels.length">—</span></dd>
+                      <dt x-text="t('mr.created')"></dt><dd x-text="fullDate(detail.mr.created_at)"></dd>
+                      <dt x-text="t('mr.updatedAt')"></dt><dd x-text="fullDate(detail.mr.updated_at)"></dd>
+                      <dt>Commit</dt><dd class="mono" x-text="(detail.mr.sha || '').slice(0, 12)"></dd>
+                      <dt x-text="t('mr.aiComments')"></dt><dd x-text="t(config.post_to_gitlab ? (config.gitlab_mode === 'comment' ? 'mr.aiCommentsComment' : 'mr.aiCommentsDraft') : 'mr.aiCommentsOff')"></dd>
+                    </dl>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <template x-if="route.view === 'settings'">
+      <div style="display: contents">
+        <div class="page-head">
+          <div style="min-width: 0">
+            <div class="page-title" x-text="t('common.settings')"></div>
+            <div class="faint" style="font-size: 12.5px" x-show="settings.dbPath"><span x-text="t('settings.storedIn')"></span> <span class="mono" x-text="settings.dbPath"></span> <span x-text="t('settings.overridesEnv')"></span></div>
+          </div>
+          <div class="head-actions">
+            <button class="btn-ghost" x-show="dirtyCount" @click="discardSettings()" x-text="t('settings.discard')"></button>
+            <button class="btn-primary" :disabled="!dirtyCount || settings.saving" @click="saveSettings()">
+              <template x-if="settings.saving"><span class="spinner" style="border-top-color: var(--primary-text)"></span></template>
+              <span x-text="dirtyCount ? t('settings.save', { n: dirtyCount }) : t('settings.saved')"></span>
+            </button>
+          </div>
+        </div>
+        <div class="content">
+          <template x-if="settings.loading && !settings.items.length"><div class="skeleton" style="width: 50%"></div></template>
+          <template x-if="settings.error"><div class="card"><div class="empty"><h3 x-text="t('settings.loadFailed')"></h3><span x-text="settings.error"></span></div></div></template>
+          <div class="settings-layout" x-show="settings.items.length">
+            <nav class="settings-nav">
+              <template x-for="g in settings.groups" :key="g.id">
+                <button @click="scrollToGroup(g.id)">
+                  <span x-text="g.label"></span>
+                  <span class="dot purple" x-show="groupItems(g.id).some(s => isDirty(s))" :title="t('settings.unsaved')"></span>
+                </button>
+              </template>
+            </nav>
+            <div style="min-width: 0">
+              <template x-for="g in settings.groups" :key="g.id">
+                <section class="card settings-group" :id="'sg-' + g.id">
+                  <div class="sg-head">
+                    <div style="min-width: 0">
+                      <h3 x-text="g.label"></h3>
+                      <div class="faint" style="font-size: 12.5px" x-text="g.description"></div>
+                    </div>
+                    <template x-if="g.test">
+                      <div class="sg-test">
+                        <span class="test-result" x-show="tests[g.test] && !tests[g.test].loading" :class="tests[g.test]?.ok ? 'add' : 'del'" x-text="tests[g.test]?.message"></span>
+                        <button class="btn-outline" @click="testConnection(g.test)" :disabled="tests[g.test]?.loading">
+                          <template x-if="tests[g.test]?.loading"><span class="spinner"></span></template>
+                          <span x-text="t('settings.test')"></span>
+                        </button>
+                      </div>
+                    </template>
+                  </div>
+                  <template x-for="s in groupItems(g.id)" :key="s.key">
+                    <div class="setting-row" :class="{ dirty: isDirty(s) }">
+                      <div class="setting-label">
+                        <div class="sl-top">
+                          <span x-text="s.label"></span>
+                          <span class="src" :class="resets[s.key] ? 'reset' : s.source" x-text="sourceLabel(s)"></span>
+                          <span class="chip warn" x-show="s.restart">restart</span>
+                        </div>
+                        <div class="mono faint sl-key" x-text="s.key"></div>
+                        <div class="sl-desc" x-show="s.description" x-text="s.description"></div>
+                      </div>
+                      <div class="setting-input">
+                        <template x-if="s.type === 'bool'">
+                          <button class="switch" :class="{ on: fieldValue(s) === 'true' }" @click="toggleField(s)" role="switch" :aria-checked="fieldValue(s) === 'true'"><i></i></button>
+                        </template>
+                        <template x-if="s.type === 'select'">
+                          <select class="input" :value="fieldValue(s)" @change="setField(s, $event.target.value)">
+                            <template x-for="o in s.options" :key="o"><option :value="o" x-text="o" :selected="o === fieldValue(s)"></option></template>
+                          </select>
+                        </template>
+                        <template x-if="s.type === 'secret'">
+                          <input class="input mono" type="password" autocomplete="new-password" :value="fieldValue(s)" :placeholder="secretPlaceholder(s)" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <template x-if="s.type === 'int'">
+                          <input class="input mono" type="number" min="0" :value="fieldValue(s)" :placeholder="s.default" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <template x-if="s.type === 'string' || s.type === 'list'">
+                          <input class="input" :class="{ mono: s.type === 'list' || s.key.endsWith('_URL') || s.key.endsWith('PATTERN') }" type="text" :value="fieldValue(s)" :placeholder="s.placeholder || s.default" @input="setField(s, $event.target.value)" />
+                        </template>
+                        <div class="setting-actions">
+                          <button class="link" x-show="isDirty(s)" @click="undoField(s)" x-text="t('settings.undo')"></button>
+                          <button class="link" x-show="s.source === 'ui' && !resets[s.key]" @click="resetField(s)" x-text="t(s.env_set ? 'settings.restoreEnv' : 'settings.restoreDefault')"></button>
+                        </div>
                       </div>
                     </div>
-                  `;
-                  }).join('')}
-                ` : '<p>No changes to display</p>'}
-              </div>
-            `;
-          },
+                  </template>
+                </section>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </main>
+</div>
 
-          formatDiff(diffText, filePath, issues = []) {
-            // Parse line numbers from diff hunks
-            let currentLineNumber = 0;
-            let hunkStartLine = 0;
-            const issuesByLine = {};
-            
-            // Group issues by line number
-            issues.forEach(issue => {
-              if (issue.line > 0) {
-                if (!issuesByLine[issue.line]) {
-                  issuesByLine[issue.line] = [];
-                }
-                issuesByLine[issue.line].push(issue);
-              }
-            });
+<!-- toasts -->
+<div class="toasts">
+  <template x-for="t in toasts" :key="t.id">
+    <div class="toast">
+      <span class="dot" :class="t.dot"></span>
+      <div style="min-width: 0"><b x-text="t.title"></b><span x-text="t.text"></span></div>
+      <button @click="toasts = toasts.filter(x => x.id !== t.id)"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+    </div>
+  </template>
+</div>
 
-            const lines = diffText.split('\n');
-            const result = [];
-            
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              
-              if (line.startsWith('+++') || line.startsWith('---')) {
-                result.push(`<div class="diff-hunk-header">${this.escapeHtml(line)}</div>`);
-              } else if (line.startsWith('@@')) {
-                // Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
-                const match = line.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/);
-                if (match) {
-                  hunkStartLine = parseInt(match[3], 10);
-                  currentLineNumber = hunkStartLine - 1; // Will be incremented for each line in new file
-                }
-                result.push(`<div class="diff-hunk-header">${this.escapeHtml(line)}</div>`);
-              } else if (line.startsWith('+')) {
-                // Added line in new file
-                currentLineNumber++;
-                const lineContent = line.substring(1);
-                const lineIssues = issuesByLine[currentLineNumber] || [];
-                const hasIssue = lineIssues.length > 0;
-                
-                let html = `
-                  <div class="diff-line added${hasIssue ? ' has-issue' : ''}">
-                    <span class="diff-line-number added" data-line="${currentLineNumber}"></span>
-                    <span class="diff-line-content"><code>${this.escapeHtml(lineContent)}</code></span>
-                  </div>
-                `;
-                
-                // Add issue comments
-                if (hasIssue) {
-                  lineIssues.forEach(issue => {
-                    html += `
-                      <div class="diff-line-issue ${issue.severity.toLowerCase()}" data-type="${this.escapeHtml(issue.type)}">
-                        <div class="diff-line-issue-header">
-                          <span class="diff-line-issue-type">${this.escapeHtml(issue.type)}</span>
-                          <span>${this.escapeHtml(issue.severity)}</span>
-                        </div>
-                        <div class="diff-line-issue-description">${this.escapeHtml(issue.description)}</div>
-                        ${issue.code ? `<div class="diff-line-issue-code">${this.escapeHtml(issue.code)}</div>` : ''}
-                        ${issue.fix ? `
-                          <div class="diff-line-issue-fix">
-                            <strong>Suggested fix:</strong>
-                            <div class="diff-line-issue-code">${this.escapeHtml(issue.fix)}</div>
-                          </div>
-                        ` : ''}
-                      </div>
-                    `;
-                  });
-                }
-                
-                result.push(html);
-              } else if (line.startsWith('-')) {
-                // Removed line from old file - don't increment line number
-                result.push(`
-                  <div class="diff-line removed">
-                    <span class="diff-line-number removed"></span>
-                    <span class="diff-line-content"><code>${this.escapeHtml(line.substring(1))}</code></span>
-                  </div>
-                `);
-              } else {
-                // Context line - exists in both files, increment line number
-                currentLineNumber++;
-                const lineIssues = issuesByLine[currentLineNumber] || [];
-                const hasIssue = lineIssues.length > 0;
-                
-                let html = `
-                  <div class="diff-line context${hasIssue ? ' has-issue' : ''}">
-                    <span class="diff-line-number context" data-line="${currentLineNumber}"></span>
-                    <span class="diff-line-content"><code>${this.escapeHtml(line)}</code></span>
-                  </div>
-                `;
-                
-                // Add issue comments for context lines too
-                if (hasIssue) {
-                  lineIssues.forEach(issue => {
-                    html += `
-                      <div class="diff-line-issue ${issue.severity.toLowerCase()}" data-type="${this.escapeHtml(issue.type)}">
-                        <div class="diff-line-issue-header">
-                          <span class="diff-line-issue-type">${this.escapeHtml(issue.type)}</span>
-                          <span>${this.escapeHtml(issue.severity)}</span>
-                        </div>
-                        <div class="diff-line-issue-description">${this.escapeHtml(issue.description)}</div>
-                        ${issue.code ? `<div class="diff-line-issue-code">${this.escapeHtml(issue.code)}</div>` : ''}
-                        ${issue.fix ? `
-                          <div class="diff-line-issue-fix">
-                            <strong>Suggested fix:</strong>
-                            <div class="diff-line-issue-code">${this.escapeHtml(issue.fix)}</div>
-                          </div>
-                        ` : ''}
-                      </div>
-                    `;
-                  });
-                }
-                
-                result.push(html);
-              }
-            }
-            
-            return result.join('');
-          },
-
-          escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-          },
-
-          // Local storage
-          saveReviewResult(iid, review) {
-            const results = this.getReviewResults();
-            results[iid] = { ...review, timestamp: new Date().toISOString() };
-            localStorage.setItem('codereview_results', JSON.stringify(results));
-          },
-
-          getReviewResults() {
-            const stored = localStorage.getItem('codereview_results');
-            return stored ? JSON.parse(stored) : {};
-          },
-
-          loadReviewResults() {
-            const results = this.getReviewResults();
-            this.mergeRequests.forEach(mr => {
-              if (results[mr.iid]) {
-                mr.reviewed = true;
-                mr.reviewedAt = results[mr.iid].timestamp;
-                // Only set reviewResult if it's not already set (preserve existing state)
-                if (!mr.reviewResult) {
-                  mr.reviewResult = this.createReviewResultHTML(results[mr.iid]);
-                }
-                // Don't reset showReview if it's already open
-                // mr.showReview stays as is
-              }
-            });
-            this.scheduleStatsUpdate();
-          },
-
-          clearReviewResult(iid) {
-            const results = this.getReviewResults();
-            delete results[iid];
-            localStorage.setItem('codereview_results', JSON.stringify(results));
-          },
-
-          // Auto refresh - only for stats, not merge requests
-          startAutoRefresh() {
-            setInterval(() => {
-              // Only refresh stats, not merge requests list
-              this.scheduleStatsUpdate();
-            }, 30000);
-          },
-
-          async refreshMergeRequests() {
-            await this.loadMergeRequests();
-          },
-
-          // Debounced update stats
-          debouncedUpdateStats: null,
-          scheduleStatsUpdate() {
-            if (this.debouncedUpdateStats) {
-              clearTimeout(this.debouncedUpdateStats);
-            }
-            this.debouncedUpdateStats = setTimeout(() => {
-              this.updateStats();
-            }, 100);
-          }
-        }
-      }
-    </script>
-  </body>
+</body>
 </html>

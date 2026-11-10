@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/sirupsen/logrus"
 )
@@ -12,59 +13,47 @@ import (
 var severityIcon = map[string]string{"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}
 
 type labels struct {
+	lang                                                                                                              string
 	verdict, security, quality, requirements, reqHeader                                                               string
 	verdicts                                                                                                          map[string]string
 	header, task, noTask, score, taskFindings, outsideDiff, suggestions, fix, failedFiles, footerDraft, footerComment string
+
+	reReview, reFixed, reOpen, reAccepted, reNew, replyFixed, replyAccepted string
 }
 
 func (c *ReviewConfig) labels() labels {
-	if strings.HasPrefix(strings.ToLower(c.Language), "pl") || strings.EqualFold(c.Language, "polski") {
-		return labels{
-			verdict:      "Werdykt",
-			security:     "### 🔒 Bezpieczeństwo",
-			quality:      "### ⚡ Jakość, ilość kodu i wydajność",
-			requirements: "### 📋 Realizacja wymagań z zadania",
-			reqHeader:    "| | Wymaganie | Gdzie / uwagi |",
-			verdicts: map[string]string{
-				VerdictApprove:             "✅ Można zatwierdzić, nie znaleziono problemów",
-				VerdictApproveWithComments: "💬 Można zatwierdzić po drobnych poprawkach",
-				VerdictRequestChanges:      "⛔ Wymagane zmiany przed merge",
-			},
-			header:        "## 🤖 AI Code Review",
-			task:          "Zadanie",
-			noTask:        "Nie znaleziono powiązanego zadania w Jira (brak klucza w tytule, gałęzi lub opisie MR).",
-			score:         "Ocena",
-			taskFindings:  "### Zgodność z zadaniem i uwagi ogólne",
-			outsideDiff:   "### Uwagi, których nie udało się przypiąć do linii",
-			suggestions:   "### Sugestie",
-			fix:           "Propozycja poprawki",
-			failedFiles:   "### Pliki, których nie udało się przeanalizować",
-			footerDraft:   "_Komentarze wygenerowane automatycznie jako szkic review. Zweryfikuj je przed opublikowaniem._",
-			footerComment: "_Komentarze wygenerowane automatycznie przez AI._",
-		}
-	}
+	lang := c.Lang()
+	t := func(key string) string { return i18n.T(lang, "publish."+key) }
 	return labels{
-		verdict:      "Verdict",
-		security:     "### 🔒 Security",
-		quality:      "### ⚡ Code volume, refactoring and performance",
-		requirements: "### 📋 Task requirements",
-		reqHeader:    "| | Requirement | Where / notes |",
+		lang:         lang,
+		verdict:      t("verdict"),
+		security:     t("security"),
+		quality:      t("quality"),
+		requirements: t("requirements"),
+		reqHeader:    t("reqHeader"),
 		verdicts: map[string]string{
-			VerdictApprove:             "✅ Approve, no issues found",
-			VerdictApproveWithComments: "💬 Approve after minor fixes",
-			VerdictRequestChanges:      "⛔ Changes required before merge",
+			VerdictApprove:             t("verdict." + VerdictApprove),
+			VerdictApproveWithComments: t("verdict." + VerdictApproveWithComments),
+			VerdictRequestChanges:      t("verdict." + VerdictRequestChanges),
 		},
-		header:        "## 🤖 AI Code Review",
-		task:          "Task",
-		noTask:        "No linked Jira task found (no key in MR title, branch or description).",
-		score:         "Score",
-		taskFindings:  "### Task compliance and general findings",
-		outsideDiff:   "### Findings that could not be attached to a line",
-		suggestions:   "### Suggestions",
-		fix:           "Suggested fix",
-		failedFiles:   "### Files that could not be reviewed",
-		footerDraft:   "_Generated automatically as a draft review. Verify before submitting._",
-		footerComment: "_Generated automatically by AI._",
+		header:        t("header"),
+		task:          t("task"),
+		noTask:        t("noTask"),
+		score:         t("score"),
+		taskFindings:  t("taskFindings"),
+		outsideDiff:   t("outsideDiff"),
+		suggestions:   t("suggestions"),
+		fix:           t("fix"),
+		failedFiles:   t("failedFiles"),
+		footerDraft:   t("footerDraft"),
+		footerComment: t("footerComment"),
+		reReview:      t("reReview"),
+		reFixed:       t("reFixed"),
+		reOpen:        t("reOpen"),
+		reAccepted:    t("reAccepted"),
+		reNew:         t("reNew"),
+		replyFixed:    t("replyFixed"),
+		replyAccepted: t("replyAccepted"),
 	}
 }
 
@@ -98,7 +87,7 @@ func formatIssue(l labels, is ai.Issue, withLocation bool) string {
 
 // publishToGitLab posts inline comments for each finding and one summary note.
 // Returns a short human-readable status line.
-func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, results []fileResult, taskReview *ai.CodeReview, jiraIssues []*JiraIssue) (string, error) {
+func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, results []fileResult, taskReview *ai.CodeReview, jiraIssues []*JiraIssue, rr *reReview) (string, error) {
 	cfg := r.config
 	l := cfg.labels()
 	mode := cfg.GitLabMode
@@ -148,9 +137,49 @@ func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, result
 		}
 	}
 
+	// Re-review: answer and resolve threads of fixed / accepted findings
+	resolved := 0
+	if rr != nil && rr.source == "gitlab" {
+		for _, f := range rr.findings {
+			if f.DiscussionID == "" || f.Status == ai.FindingOpen {
+				continue
+			}
+			body := l.replyAccepted
+			if f.Status == ai.FindingFixed {
+				body = fmt.Sprintf(l.replyFixed, shortSha(refs.HeadSha))
+			}
+			if f.Comment != "" {
+				body += "\n\n" + f.Comment
+			}
+			if err := r.gitlabService.ReplyToThread(mr.IID, f.DiscussionID, body, true, mode); err != nil {
+				logrus.Warnf("[GitLab] Reply to thread %s failed: %v", f.DiscussionID, err)
+				continue
+			}
+			resolved++
+		}
+	}
+
 	// Summary note
 	var b strings.Builder
 	b.WriteString(l.header + "\n\n")
+	if rr != nil {
+		fu := rr.followup()
+		fmt.Fprintf(&b, l.reReview+"\n\n", shortSha(rr.sinceSHA))
+		fmt.Fprintf(&b, "✅ %s: **%d** · ⏳ %s: **%d** · 👍 %s: **%d** · 🆕 %s: **%d**\n\n",
+			l.reFixed, fu.Fixed, l.reOpen, fu.Open, l.reAccepted, fu.Accepted, l.reNew, fu.New)
+		for _, it := range fu.Items {
+			if it.Status != ai.FindingOpen {
+				continue
+			}
+			loc := fmt.Sprintf("`%s:%d`", it.File, it.Line)
+			if it.URL != "" {
+				loc = fmt.Sprintf("[%s](%s)", loc, it.URL)
+			}
+			desc := strings.SplitN(strings.TrimSpace(it.Description), "\n", 2)[0]
+			fmt.Fprintf(&b, "- ⏳ %s **[%s]** %s %s\n", severityIcon[it.Severity], it.Severity, loc, truncate(desc, 200, "…"))
+		}
+		b.WriteString("\n")
+	}
 	if len(jiraIssues) > 0 {
 		for _, ji := range jiraIssues {
 			fmt.Fprintf(&b, "**%s:** [%s](%s) %s (%s)\n\n", l.task, ji.Key, ji.URL, ji.Summary, ji.Status)
@@ -221,12 +250,15 @@ func (r *ReviewService) publishToGitLab(mr *MergeRequest, refs *DiffRefs, result
 		return "", fmt.Errorf("summary note: %v", err)
 	}
 
-	status := fmt.Sprintf("GitLab (%s): %d komentarzy w kodzie + podsumowanie", mode, inline)
+	status := i18n.T(l.lang, "publish.status", mode, inline)
+	if resolved > 0 {
+		status += i18n.T(l.lang, "publish.status.resolved", resolved)
+	}
 	if failed > 0 {
-		status += fmt.Sprintf(", %d przeniesionych do podsumowania", failed)
+		status += i18n.T(l.lang, "publish.status.moved", failed)
 	}
 	if mode == "draft" {
-		status += ". Otwórz MR w GitLab → „Submit review”, aby je opublikować."
+		status += i18n.T(l.lang, "publish.status.draft")
 	}
 	logrus.Infof("[GitLab] MR %d: %s", mr.IID, status)
 	return status, nil

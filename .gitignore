@@ -65,3 +65,5 @@ temp/
 
 # Air (hot reload)
 tmp/ 
+# SQLite database (settings incl. tokens, review results)
+data/

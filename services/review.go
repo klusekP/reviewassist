@@ -7,23 +7,52 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
 
 type ReviewService struct {
-	gitlabService *GitLabService
+	gitlabService *GitLabService // bound to one project (see forProject)
 	aiService     *AIService
 	wsHub         *WSHub
 	jira          *JiraService // nil when Jira is not configured
 	config        *ReviewConfig
-	repo          *RepoManager // used by the claude-code engine
+	repo          *RepoManager // used by the claude-code engine, bound to the same project
+	shared        *reviewShared
+	running       *runningState // survives settings reloads
+	store         *Store
 }
 
-func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub) *ReviewService {
+// reviewShared is state common to all project-scoped copies of ReviewService.
+type reviewShared struct {
+	mu    sync.Mutex
+	repos map[int]*RepoManager
+}
+
+// runningState tracks reviews in progress; shared across settings reloads.
+type runningState struct {
+	mu sync.Mutex
+	m  map[string]*ReviewProgress // "projectID/iid" -> progress
+}
+
+func newRunningState() *runningState { return &runningState{m: map[string]*ReviewProgress{}} }
+
+// ReviewProgress describes a review that is currently running on the server.
+type ReviewProgress struct {
+	ProjectID int    `json:"project_id"`
+	IID       int    `json:"iid"`
+	StartedAt string `json:"started_at"`
+	Done      int    `json:"done"`
+	Total     int    `json:"total"`
+	Engine    string `json:"engine"`
+}
+
+func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub *WSHub, store *Store, running *runningState) *ReviewService {
 	cfg := LoadReviewConfig()
 	switch cfg.Engine {
 	case "claude-code":
@@ -40,108 +69,218 @@ func NewReviewService(gitlabService *GitLabService, aiService *AIService, wsHub 
 		logrus.Warnf("[Review] Unknown REVIEW_ENGINE=%q, using llm", cfg.Engine)
 		cfg.Engine = "llm"
 	}
-	return &ReviewService{
+	r := &ReviewService{
 		gitlabService: gitlabService,
 		aiService:     aiService,
 		wsHub:         wsHub,
 		jira:          NewJiraService(),
 		config:        cfg,
-		repo:          NewRepoManager(gitlabService, cfg.WorkDir),
+		shared:        &reviewShared{repos: map[int]*RepoManager{}},
+		running:       running,
+		store:         store,
+	}
+	return r.forProject(gitlabService.ProjectID())
+}
+
+// forProject returns a copy of the service bound to the given GitLab project.
+func (r *ReviewService) forProject(projectID int) *ReviewService {
+	c := *r
+	c.gitlabService = r.gitlabService.ForProject(projectID)
+	r.shared.mu.Lock()
+	repo, ok := r.shared.repos[projectID]
+	if !ok {
+		repo = NewRepoManager(c.gitlabService, r.config.WorkDir)
+		r.shared.repos[projectID] = repo
+	}
+	r.shared.mu.Unlock()
+	c.repo = repo
+	return &c
+}
+
+func (r *ReviewService) pid() int { return r.gitlabService.ProjectID() }
+
+// scoped resolves the project from the :pid route param (or the default project) and the MR from :id.
+func (r *ReviewService) scoped(c *gin.Context, needIID bool) (*ReviewService, int, bool) {
+	pid := r.pid()
+	if s := c.Param("pid"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.invalidProject")})
+			return nil, 0, false
+		}
+		pid = n
+	}
+	if pid == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.noProject")})
+		return nil, 0, false
+	}
+	iid := 0
+	if needIID {
+		n, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.invalidMR")})
+			return nil, 0, false
+		}
+		iid = n
+	}
+	return r.forProject(pid), iid, true
+}
+
+func runningKey(pid, iid int) string { return fmt.Sprintf("%d/%d", pid, iid) }
+
+func (r *ReviewService) startRunning(iid, total int) bool {
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	key := runningKey(r.pid(), iid)
+	if _, busy := r.running.m[key]; busy {
+		return false
+	}
+	r.running.m[key] = &ReviewProgress{ProjectID: r.pid(), IID: iid, StartedAt: time.Now().UTC().Format(time.RFC3339), Total: total, Engine: r.config.Engine}
+	return true
+}
+
+func (r *ReviewService) progressRunning(iid int) {
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	if p, ok := r.running.m[runningKey(r.pid(), iid)]; ok {
+		p.Done++
 	}
 }
 
+func (r *ReviewService) stopRunning(iid int) {
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	delete(r.running.m, runningKey(r.pid(), iid))
+}
+
+func (r *ReviewService) runningFor(pid int) map[int]ReviewProgress {
+	r.running.mu.Lock()
+	defer r.running.mu.Unlock()
+	out := map[int]ReviewProgress{}
+	for _, p := range r.running.m {
+		if p.ProjectID == pid {
+			out[p.IID] = *p
+		}
+	}
+	return out
+}
+
 func (r *ReviewService) GetMergeRequests(c *gin.Context) {
+	r, _, ok := r.scoped(c, false)
+	if !ok {
+		return
+	}
 	state := c.DefaultQuery("state", "opened")
 
 	mrs, err := r.gitlabService.GetMergeRequests(state)
 	if err != nil {
-		logrus.Errorf("Error fetching merge requests: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge requests",
-		})
+		logrus.Errorf("Error fetching merge requests of project %d: %v", r.pid(), err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMRs", err.Error())})
 		return
 	}
 
-	logrus.Infof("Fetched %d merge requests", len(mrs))
-
 	c.JSON(http.StatusOK, gin.H{
+		"project_id":     r.pid(),
 		"merge_requests": mrs,
 		"count":          len(mrs),
+		"running":        r.runningFor(r.pid()),
 	})
 }
 
 func (r *ReviewService) GetMergeRequest(c *gin.Context) {
-	iidStr := c.Param("id")
-	iid, err := strconv.Atoi(iidStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid merge request ID",
-		})
+	r, iid, ok := r.scoped(c, true)
+	if !ok {
 		return
 	}
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge request",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMR", err.Error())})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
+	}
+
+	var running *ReviewProgress
+	if p, ok := r.runningFor(r.pid())[iid]; ok {
+		running = &p
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"merge_request": mr,
 		"diffs":         diffs,
 		"diff_count":    len(diffs),
+		"running":       running,
 	})
 }
 
 func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
-	iidStr := c.Param("id")
-	logrus.Infof("[Review] Starting review for MR %s (background)", iidStr)
-	iid, err := strconv.Atoi(iidStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid merge request ID",
-		})
+	r, iid, ok := r.scoped(c, true)
+	if !ok {
 		return
 	}
+	logrus.Infof("[Review] Starting review for project %d MR %d (background)", r.pid(), iid)
 
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching merge request",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMR", err.Error())})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching diff",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchDiff", err.Error())})
 		return
 	}
 
 	reviewable := r.filterDiffs(iid, diffs)
+	if !r.startRunning(iid, len(reviewable)) {
+		c.JSON(http.StatusConflict, gin.H{"error": i18n.T(uiLang(c), "api.reviewRunning")})
+		return
+	}
 
 	// Return 202 immediately, run review in background
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":      "started",
 		"message":     "Review started. Results will be delivered via WebSocket.",
+		"project_id":  r.pid(),
 		"mr_id":       iid,
 		"mr_title":    mr.Title,
 		"total_files": len(reviewable),
+		"engine":      r.config.Engine,
 	})
 
-	go r.runReview(mr, reviewable, diffs)
+	go func() {
+		defer r.stopRunning(iid)
+		r.runReview(mr, reviewable, diffs)
+	}()
+}
+
+// GetConfig exposes non-secret settings for the UI.
+func (r *ReviewService) GetConfig(c *gin.Context) {
+	model := r.config.AgentModel
+	if r.config.Engine == "llm" {
+		model = envString("AI_MODEL", "openai")
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"default_project_id": r.pid(),
+		"gitlab_url":         r.gitlabService.baseURL,
+		"engine":             r.config.Engine,
+		"model":              model,
+		"language":           r.config.Language,
+		"ui_language":        i18n.UILanguage(),
+		"ui_languages":       i18n.UILanguages,
+		"post_to_gitlab":     r.config.PostToGitLab,
+		"gitlab_mode":        r.config.GitLabMode,
+		"jira_enabled":       r.jira != nil,
+		"db_path":            r.store.Path(),
+	})
 }
 
 // filterDiffs drops ignored/binary files and applies the REVIEW_MAX_FILES limit.
@@ -172,19 +311,19 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.Errorf("[Review] MR %d panic: %v", iid, rec)
-			r.wsHub.BroadcastReviewError(iid, fmt.Sprintf("review failed: %v", rec))
+			r.wsHub.BroadcastReviewError(r.pid(), iid, fmt.Sprintf("review failed: %v", rec))
 		}
 	}()
 
 	if len(diffs) == 0 {
-		r.wsHub.BroadcastReview(iid, &ai.CodeReview{Summary: "Brak plików do review (wszystkie pominięte lub usunięte).", Score: 0})
+		r.wsHub.BroadcastReview(r.pid(), iid, &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.noFiles"), Score: 0})
 		return
 	}
 
 	refs, err := r.gitlabService.GetDiffRefs(iid)
 	if err != nil {
 		logrus.Errorf("[Review] MR %d: %v", iid, err)
-		r.wsHub.BroadcastReviewError(iid, err.Error())
+		r.wsHub.BroadcastReviewError(r.pid(), iid, err.Error())
 		return
 	}
 
@@ -200,35 +339,62 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 	}
 	taskContext, issues := r.jira.BuildTaskContext(keySources...)
 
+	// Re-review: findings of the previous review to check against the current code
+	rr := r.loadPreviousFindings(mr, refs)
+	if rr.empty() {
+		rr = nil
+	}
+
 	// 2. Review with the configured engine
 	var results []fileResult
 	var taskReview *ai.CodeReview
 	total := len(diffs)
 	if r.config.Engine == "claude-code" {
-		results, taskReview, err = r.runAgentReview(mr, refs, diffs, taskContext)
+		results, taskReview, err = r.runAgentReview(mr, refs, diffs, taskContext, rr)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: %v", iid, err)
-			r.wsHub.BroadcastReviewError(iid, err.Error())
+			r.wsHub.BroadcastReviewError(r.pid(), iid, err.Error())
 			return
 		}
 		for i, res := range results {
-			r.wsHub.BroadcastReviewPart(iid, res.diff.NewPath, i, total, res.review)
+			r.wsHub.BroadcastReviewPart(r.pid(), iid, res.diff.NewPath, i, total, res.review)
 		}
 	} else {
-		results, taskReview = r.runLLMReview(mr, refs, diffs, allDiffs, taskContext)
+		results, taskReview = r.runLLMReview(mr, refs, diffs, allDiffs, taskContext, rr)
 	}
 
 	// 3. Scope guard + final verdict (never milder than the findings justify)
 	if taskReview == nil {
-		taskReview = &ai.CodeReview{Summary: "Brak oceny całościowej (błąd modelu)."}
+		taskReview = &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.noTaskReview")}
 	}
 	applyScope(iid, results, taskReview, allDiffs)
+
+	// 3a. Re-review: status of previous findings, no repeated comments
+	var stillOpen []ai.Issue
+	if rr != nil {
+		statuses := taskReview.PreviousFindings // claude-code answers in the main review
+		if r.config.Engine != "claude-code" {
+			var err error
+			if statuses, err = r.checkPreviousFindings(mr, refs, rr); err != nil {
+				logrus.Warnf("[ReReview] MR %d: check of previous findings failed: %v", iid, err)
+			}
+		}
+		rr.applyStatuses(r.config.Lang(), statuses)
+		rr.dropRepeated(iid, results, taskReview)
+		stillOpen = rr.openIssues()
+	}
+	taskReview.PreviousFindings = nil
+
 	allIssues := append([]ai.Issue{}, taskReview.Issues...)
 	for _, res := range results {
 		if !res.failed {
 			allIssues = append(allIssues, res.review.Issues...)
 		}
 	}
+	if rr != nil {
+		rr.newFindings = len(allIssues)
+	}
+	allIssues = append(allIssues, stillOpen...)
 	taskReview.Verdict = finalVerdict(taskReview.Verdict, allIssues, taskReview.Requirements)
 
 	// 4. Aggregate for the web UI
@@ -250,7 +416,12 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		aggregated.SecuritySummary = taskReview.SecuritySummary
 		aggregated.QualitySummary = taskReview.QualitySummary
 		aggregated.Requirements = taskReview.Requirements
-		if line := requirementsLine(taskReview.Requirements); line != "" {
+		aggregated.Issues = append(aggregated.Issues, stillOpen...)
+		if rr != nil {
+			aggregated.Followup = rr.followup()
+			aggregated.Summary += "\n\n🔁 " + followupLine(aggregated.Followup)
+		}
+		if line := requirementsLine(r.config.Lang(), taskReview.Requirements); line != "" {
 			aggregated.Summary += "\n\n📋 " + line
 		}
 		if taskReview.SecuritySummary != "" {
@@ -263,16 +434,17 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 
 	// 5. Publish to GitLab
 	if r.config.PostToGitLab {
-		published, err := r.publishToGitLab(mr, refs, results, taskReview, issues)
+		published, err := r.publishToGitLab(mr, refs, results, taskReview, issues, rr)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: publishing to GitLab failed: %v", iid, err)
-			aggregated.Summary += "\n\n⚠️ Błąd publikacji w GitLab: " + err.Error()
+			aggregated.Summary += "\n\n" + i18n.T(r.config.Lang(), "review.publishError", err.Error())
 		} else {
 			aggregated.Summary += "\n\n" + published
 		}
 	}
 
-	r.wsHub.BroadcastReview(iid, aggregated)
+	r.saveReview(mr, aggregated)
+	r.wsHub.BroadcastReview(r.pid(), iid, aggregated)
 	logrus.Infof("[Review] MR %d review completed (%d files)", iid, total)
 }
 
@@ -320,7 +492,7 @@ func applyScope(iid int, results []fileResult, taskReview *ai.CodeReview, allDif
 }
 
 // runLLMReview is the prompt-based engine: one LLM call per file plus one MR-level call.
-func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, allDiffs []Diff, taskContext string) ([]fileResult, *ai.CodeReview) {
+func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, allDiffs []Diff, taskContext string, rr *reReview) ([]fileResult, *ai.CodeReview) {
 	iid := mr.IID
 	project := r.BuildProjectContext(refs.HeadSha)
 
@@ -359,15 +531,18 @@ func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []D
 				SourceBranch:  mr.SourceBranch,
 				TaskContext:   taskContext,
 				Project:       project,
+
+				PreviousFindings: rr.fileSection(d.NewPath),
 			})
 			res := fileResult{diff: d, lines: lines, review: review}
 			if err != nil {
 				logrus.Warnf("[Review] MR %d file %s: %v", iid, d.NewPath, err)
 				res.failed = true
-				res.review = &ai.CodeReview{Summary: "Nie udało się wykonać review tego pliku: " + err.Error()}
+				res.review = &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.fileFailed", err.Error())}
 			}
 			results[idx] = res
-			r.wsHub.BroadcastReviewPart(iid, d.NewPath, idx, total, res.review)
+			r.progressRunning(iid)
+			r.wsHub.BroadcastReviewPart(r.pid(), iid, d.NewPath, idx, total, res.review)
 		}(i, diff)
 	}
 	wg.Wait()
@@ -432,40 +607,15 @@ func dedupeStrings(s []string) []string {
 }
 
 func (r *ReviewService) GetProjects(c *gin.Context) {
-	projects, err := r.gitlabService.GetProjects()
+	projects, err := r.gitlabService.GetProjects(c.Query("refresh") != "")
 	if err != nil {
 		logrus.Errorf("Error fetching projects: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Error fetching projects",
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchProjects", err.Error())})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"projects": projects,
 		"count":    len(projects),
-	})
-}
-
-func (r *ReviewService) GetStats(c *gin.Context) {
-	mrs, err := r.gitlabService.GetMergeRequests("opened")
-	if err != nil {
-		logrus.Errorf("Error fetching stats: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"totalMRs":    "-",
-			"reviewedMRs": "-",
-			"avgScore":    "-",
-			"totalIssues": "-",
-		})
-		return
-	}
-
-	// TODO: Implement statistics logic based on saved reviews
-	// For now, return basic data
-	c.JSON(http.StatusOK, gin.H{
-		"totalMRs":    len(mrs),
-		"reviewedMRs": 0,   // TODO: policz z localStorage lub bazy danych
-		"avgScore":    "-", // TODO: policz średnią ocenę
-		"totalIssues": 0,   // TODO: policz łączne problemy
 	})
 }

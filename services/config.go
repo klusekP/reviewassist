@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"codereviewAI/services/i18n"
 )
 
 // ReviewConfig holds review behaviour settings loaded from environment variables.
@@ -79,6 +81,11 @@ func defaultWorkDir() string {
 		return filepath.Join(dir, "codereviewAI")
 	}
 	return filepath.Join(os.TempDir(), "codereviewAI")
+}
+
+// Lang is the review output language code used for labels and messages (unknown languages fall back to English).
+func (c *ReviewConfig) Lang() string {
+	return i18n.Or(c.Language, i18n.EN)
 }
 
 // LanguageName returns a human readable language name for the prompt.

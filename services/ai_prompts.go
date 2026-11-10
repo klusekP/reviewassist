@@ -19,6 +19,8 @@ type FileReviewInput struct {
 	SourceBranch  string
 	TaskContext   string
 	Project       *ProjectContext
+
+	PreviousFindings string // re-review: findings already reported for this file
 }
 
 // TaskReviewInput is used for the MR-level check against the Jira task.
@@ -93,6 +95,7 @@ RULES:
 		p.WriteString(strings.Join(in.OtherFiles, "\n"))
 		p.WriteString("\n")
 	}
+	p.WriteString(in.PreviousFindings)
 
 	if in.FileContent != "" {
 		fmt.Fprintf(&p, "\n## FULL FILE AFTER CHANGE: %s\n", d.NewPath)

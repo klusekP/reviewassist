@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/sirupsen/logrus"
 )
@@ -53,6 +54,19 @@ const agentOutputSchema = `{
         },
         "required": ["requirement", "status", "evidence"]
       }
+    },
+    "previous_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"type": "string", "enum": ["fixed", "open", "accepted"]},
+          "line": {"type": "integer"},
+          "comment": {"type": "string"}
+        },
+        "required": ["id", "status", "line", "comment"]
+      }
     }
   },
   "required": ["summary", "score", "issues", "verdict", "security_summary", "quality_summary", "requirements"]
@@ -82,7 +96,7 @@ type claudeResult struct {
 	DurationMs       int             `json:"duration_ms"`
 }
 
-func (r *ReviewService) buildAgentPrompt(mr *MergeRequest, refs *DiffRefs, diffs []Diff, taskContext string) string {
+func (r *ReviewService) buildAgentPrompt(mr *MergeRequest, refs *DiffRefs, diffs []Diff, taskContext string, rr *reReview) string {
 	var p strings.Builder
 	fmt.Fprintf(&p, `You are a senior engineer performing a code review of a GitLab merge request.
 The current directory is the project repository checked out at the MR head commit (branch %q).
@@ -130,6 +144,7 @@ Do NOT audit, browse or report on unrelated parts of the codebase. Pre-existing 
 	} else {
 		p.WriteString("No Jira task linked. Infer the intent from the MR title and description.\n")
 	}
+	p.WriteString(rr.agentSection(r.config.LanguageName()))
 	return p.String()
 }
 
@@ -191,7 +206,7 @@ func runClaude(ctx context.Context, cfg *ReviewConfig, dir, prompt string) (*cla
 
 // runAgentReview checks out the MR and lets Claude Code review it with read-only tools.
 // Returns per-file results (same shape as the LLM engine) and the MR-level review.
-func (r *ReviewService) runAgentReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, taskContext string) ([]fileResult, *ai.CodeReview, error) {
+func (r *ReviewService) runAgentReview(mr *MergeRequest, refs *DiffRefs, diffs []Diff, taskContext string, rr *reReview) ([]fileResult, *ai.CodeReview, error) {
 	cfg := r.config
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.AgentTimeoutMin)*time.Minute)
 	defer cancel()
@@ -202,7 +217,7 @@ func (r *ReviewService) runAgentReview(mr *MergeRequest, refs *DiffRefs, diffs [
 	}
 	defer cleanup()
 
-	prompt := r.buildAgentPrompt(mr, refs, diffs, taskContext)
+	prompt := r.buildAgentPrompt(mr, refs, diffs, taskContext, rr)
 	logrus.Infof("[Agent] MR %d: running %s in %s (%d files, prompt ~%d chars, timeout %dm)", mr.IID, cfg.AgentBin, dir, len(diffs), len(prompt), cfg.AgentTimeoutMin)
 	res, err := runClaude(ctx, cfg, dir, prompt)
 	if err != nil {
@@ -213,7 +228,7 @@ func (r *ReviewService) runAgentReview(mr *MergeRequest, refs *DiffRefs, diffs [
 	if err != nil {
 		return nil, nil, err
 	}
-	results, taskReview := splitAgentReview(review, diffs)
+	results, taskReview := splitAgentReview(r.config.Lang(), review, diffs)
 	return results, taskReview, nil
 }
 
@@ -235,7 +250,7 @@ func parseAgentReview(res *claudeResult) (*ai.CodeReview, error) {
 }
 
 // splitAgentReview assigns findings to reviewed files; everything else becomes MR-level findings.
-func splitAgentReview(review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.CodeReview) {
+func splitAgentReview(lang string, review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.CodeReview) {
 	results := make([]fileResult, len(diffs))
 	index := map[string]int{}
 	for i, d := range diffs {
@@ -244,7 +259,7 @@ func splitAgentReview(review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.Co
 	}
 	task := &ai.CodeReview{Summary: review.Summary, Score: review.Score, Suggestions: review.Suggestions,
 		Verdict: review.Verdict, SecuritySummary: review.SecuritySummary, QualitySummary: review.QualitySummary,
-		Requirements: review.Requirements}
+		Requirements: review.Requirements, PreviousFindings: review.PreviousFindings}
 	for _, is := range review.Issues {
 		file := strings.TrimPrefix(strings.TrimPrefix(is.File, "./"), "/")
 		is.File = file
@@ -255,7 +270,7 @@ func splitAgentReview(review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.Co
 		}
 	}
 	for i := range results {
-		results[i].review.Summary = fmt.Sprintf("%d uwag(i)", len(results[i].review.Issues))
+		results[i].review.Summary = i18n.T(lang, "review.fileIssues", len(results[i].review.Issues))
 		results[i].review.Score = review.Score
 	}
 	return results, task
