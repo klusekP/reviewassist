@@ -1,5 +1,8 @@
 # Code Review AI
 
+[![Tests](https://github.com/klusekP/reviewassist/actions/workflows/test.yml/badge.svg)](https://github.com/klusekP/reviewassist/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 AI code review for GitLab merge requests. It reads the linked Jira task and your project's
 documentation, comments on the changed lines, checks security, code quality and task requirements,
 and publishes the findings to GitLab as a **draft review** that you check and submit yourself.
@@ -85,6 +88,9 @@ go test ./...                      # unit tests
 go test -tags agent ./services/    # integration test with the real Claude Code CLI
 go vet ./...
 ```
+
+The same checks (gofmt, vet, tests with the race detector, build) run in GitHub Actions on every
+push and pull request: [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 Contributions are welcome. Please run the tests and keep both languages complete when changing
 texts (see [Languages → Adding a translation](docs/languages.md#adding-a-translation)).
