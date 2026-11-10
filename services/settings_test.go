@@ -1,6 +1,7 @@
 package services
 
 import (
+	"codereviewAI/services/i18n"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ func openTestStore(t *testing.T) *Store {
 }
 
 func viewOf(m *SettingsManager, key string) SettingView {
-	_, views := m.View()
+	_, views := m.View(i18n.EN)
 	for _, v := range views {
 		if v.Key == key {
 			return v
@@ -156,5 +157,41 @@ func TestStoreReviews(t *testing.T) {
 	}
 	if has, _ := s.HasReview(1, 10); has {
 		t.Error("review still present after delete")
+	}
+}
+
+func TestSettingsTranslations(t *testing.T) {
+	for _, d := range settingDefs {
+		if !i18n.Has("settings." + d.Key) {
+			t.Errorf("setting %s has no label in the i18n catalog", d.Key)
+		}
+	}
+	for _, g := range settingGroups {
+		if !i18n.Has("settings.group."+g.ID) || !i18n.Has("settings.group."+g.ID+".desc") {
+			t.Errorf("settings group %s has no label/description in the i18n catalog", g.ID)
+		}
+	}
+	m, err := NewSettingsManager(openTestStore(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups, views := m.View(i18n.PL)
+	if groups[0].Description != "Dostęp do repozytoriów i merge requestów." {
+		t.Errorf("pl group = %+v", groups[0])
+	}
+	for _, v := range views {
+		if v.Key == "GITLAB_PROJECTS" && (v.Label != "Projekty w panelu" || v.Placeholder != "grupa/api, grupa/front, 123456") {
+			t.Errorf("pl setting = %+v", v.SettingDef)
+		}
+	}
+	if _, views := m.View(i18n.EN); views[0].Label != "GitLab URL" {
+		t.Errorf("en label = %q", views[0].Label)
+	}
+	_, err = m.Update(map[string]string{"REVIEW_MAX_FILES": "dużo"}, nil)
+	if got := i18n.Message(i18n.PL, err); got != "Maks. plików w review: wymagana liczba całkowita ≥ 0" {
+		t.Errorf("pl validation error = %q", got)
+	}
+	if got := i18n.Message(i18n.EN, err); got != "Max. files per review: a whole number ≥ 0 is required" {
+		t.Errorf("en validation error = %q", got)
 	}
 }

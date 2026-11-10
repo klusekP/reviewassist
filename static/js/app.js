@@ -4,30 +4,15 @@ const LS_REVIEWS = 'codereview_results_v2';
 const LS_REVIEWS_LEGACY = 'codereview_results';
 const LS_THEME = 'codereview_theme';
 const LS_EXPANDED = 'codereview_expanded';
+const LS_LANG = 'codereview_lang';
 
 const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
 
+// labels: i18n keys verdict.<id>.label / verdict.<id>.short
 const VERDICTS = {
-  approve: { label: 'Można zatwierdzić', short: 'OK', dot: 'green', icon: '✅' },
-  approve_with_comments: { label: 'Zatwierdź po drobnych poprawkach', short: 'uwagi', dot: 'yellow', icon: '💬' },
-  request_changes: { label: 'Wymagane zmiany przed merge', short: 'wymaga zmian', dot: 'red', icon: '⛔' },
-};
-
-const MERGE_STATUS = {
-  mergeable: 'gotowy do scalenia',
-  conflict: 'konflikty',
-  broken_status: 'konflikty',
-  need_rebase: 'wymaga rebase',
-  ci_must_pass: 'czeka na CI',
-  ci_still_running: 'CI w trakcie',
-  not_approved: 'brak zatwierdzeń',
-  requested_changes: 'zgłoszono zmiany',
-  discussions_not_resolved: 'nierozwiązane dyskusje',
-  draft_status: 'draft',
-  blocked_status: 'zablokowany',
-  checking: 'sprawdzanie',
-  unchecked: 'niesprawdzony',
-  not_open: 'zamknięty',
+  approve: { dot: 'green', icon: '✅' },
+  approve_with_comments: { dot: 'yellow', icon: '💬' },
+  request_changes: { dot: 'red', icon: '⛔' },
 };
 
 const LANG_BY_EXT = {
@@ -68,6 +53,7 @@ function app() {
   return {
     // ---------- state ----------
     config: {},
+    lang: 'pl',
     theme: 'dark',
     projects: [],
     projectsLoading: true,
@@ -102,6 +88,8 @@ function app() {
     async init() {
       this.theme = readJSON(LS_THEME, null) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       this.applyTheme();
+      this.lang = normalizeLang(readJSON(LS_LANG, null)) || normalizeLang(navigator.language) || 'pl';
+      this.applyLang();
       this.expanded = readJSON(LS_EXPANDED, {});
       window.addEventListener('beforeunload', e => { if (this.dirtyCount) { e.preventDefault(); e.returnValue = ''; } });
       setInterval(() => { this.now = Date.now(); }, 1000);
@@ -111,7 +99,8 @@ function app() {
         if (e.key === 'Escape' && document.activeElement === this.$refs.search) { this.search = ''; this.$refs.search.blur(); }
       });
       this.connectWS();
-      try { this.config = await this.api('/api/v1/config'); } catch (e) { this.toast('Brak konfiguracji', e.message, 'red'); }
+      try { this.config = await this.api('/api/v1/config'); } catch (e) { this.toast(this.t('toast.noConfig'), e.message, 'red'); }
+      if (!readJSON(LS_LANG, null)) { this.lang = normalizeLang(this.config.ui_language) || this.lang; this.applyLang(); }
       await this.loadReviews();
       await this.migrateLocalReviews();
       await this.loadProjects();
@@ -119,8 +108,8 @@ function app() {
       for (const pid of Object.keys(this.expanded)) if (this.expanded[pid]) this.ensureList(+pid, 'opened');
     },
 
-    async api(url, opts) {
-      const res = await fetch(url, opts);
+    async api(url, opts = {}) {
+      const res = await fetch(url, { ...opts, headers: { 'Accept-Language': this.lang, ...(opts.headers || {}) } });
       let body = null;
       try { body = await res.json(); } catch { /* empty body */ }
       if (!res.ok) {
@@ -130,6 +119,27 @@ function app() {
       }
       return body;
     },
+
+    // ---------- language ----------
+    t(key, params) { return translate(this.lang, key, params); },
+    /** Plural-aware translation: tn('common.files', 3) -> "3 pliki" / "3 files". */
+    tn(key, n, params = {}) { return translate(this.lang, key, { ...params, n }); },
+    get uiLanguages() { return (this.config.ui_languages || UI_LANGUAGES).filter(l => MESSAGES[l]); },
+    applyLang() { document.documentElement.lang = this.lang; },
+    setLang(lang, remember = true) {
+      lang = normalizeLang(lang);
+      if (!lang) return;
+      this.lang = lang;
+      this.applyLang();
+      if (remember) writeJSON(LS_LANG, lang);
+      else try { localStorage.removeItem(LS_LANG); } catch { /* ignore */ }
+      if (this.settings.items.length) this.loadSettings(true); // labels come from the server
+    },
+    cycleLang() {
+      const langs = this.uiLanguages;
+      this.setLang(langs[(langs.indexOf(this.lang) + 1) % langs.length]);
+    },
+    get locale() { return DATE_LOCALES[this.lang] || this.lang; },
 
     // ---------- theme ----------
     applyTheme() { document.documentElement.dataset.theme = this.theme; },
@@ -161,12 +171,12 @@ function app() {
         delete this.errors[key];
         this.rememberReview(pid, msg.mr_id, msg.review, meta);
         if (this.detail?.pid === +pid && this.detail?.iid === +msg.mr_id) { this.historyPick = null; this.loadHistory(pid, msg.mr_id); }
-        const v = VERDICTS[msg.review.verdict];
-        this.toast(`Review !${msg.mr_id} gotowe`, v ? `${v.icon} ${v.label}` : `${(msg.review.issues || []).length} uwag`, v?.dot || 'green');
+        const v = this.verdict(msg.review.verdict);
+        this.toast(this.t('toast.reviewDone', { iid: msg.mr_id }), v ? `${v.icon} ${v.label}` : this.tn('toast.issues', (msg.review.issues || []).length), v?.dot || 'green');
       } else if (msg.type === 'review_error') {
         delete this.running[key];
-        this.errors[key] = msg.error || msg.message || 'Błąd review';
-        this.toast(`Review !${msg.mr_id} nie powiodło się`, this.errors[key], 'red', 8000);
+        this.errors[key] = msg.error || msg.message || this.t('toast.reviewError');
+        this.toast(this.t('toast.reviewFailed', { iid: msg.mr_id }), this.errors[key], 'red', 8000);
       }
     },
 
@@ -241,11 +251,11 @@ function app() {
       try {
         const data = await this.api(`/api/v1/projects/${pid}/merge-requests/${iid}/review`, { method: 'POST' });
         Object.assign(this.running[key] || {}, { total: data.total_files, engine: data.engine });
-        this.toast(`Review !${iid} uruchomione`, `${data.engine === 'claude-code' ? 'Agent Claude Code' : 'LLM'} · ${data.total_files} plików`, 'purple');
+        this.toast(this.t('toast.reviewStarted', { iid }), this.t('toast.reviewStartedText', { engine: data.engine === 'claude-code' ? this.t('toast.agent') : 'LLM', files: this.tn('common.files', data.total_files) }), 'purple');
       } catch (e) {
-        if (e.status === 409) { this.toast('Review już trwa', `!${iid} jest właśnie analizowany`, 'yellow'); return; }
+        if (e.status === 409) { this.toast(this.t('toast.alreadyRunning'), this.t('toast.alreadyRunningText', { iid }), 'yellow'); return; }
         delete this.running[key];
-        this.toast('Nie udało się uruchomić review', e.message, 'red', 8000);
+        this.toast(this.t('toast.startFailed'), e.message, 'red', 8000);
       }
     },
 
@@ -260,7 +270,7 @@ function app() {
         for (const rec of data.reviews || []) map[`${rec.project_id}/${rec.iid}`] = this.fromRecord(rec);
         this.reviews = map;
       } catch (e) {
-        this.toast('Nie udało się wczytać wyników review', e.message, 'red');
+        this.toast(this.t('toast.loadReviewsFailed'), e.message, 'red');
       }
     },
     async loadHistory(pid, iid) {
@@ -283,16 +293,16 @@ function app() {
       };
     },
     async clearReview(pid, iid) {
-      if (!confirm(`Usunąć wszystkie zapisane wyniki review !${iid} z bazy? Komentarze w GitLab zostają.`)) return;
+      if (!confirm(this.t('confirm.clearReview', { iid }))) return;
       try {
         await this.api(`/api/v1/projects/${pid}/merge-requests/${iid}/reviews`, { method: 'DELETE' });
         delete this.reviews[`${pid}/${iid}`];
         delete this.errors[`${pid}/${iid}`];
         this.history = [];
         this.historyPick = null;
-        this.toast('Wyniki usunięte', `Review !${iid} usunięte z bazy (komentarze w GitLab zostają)`, 'gray');
+        this.toast(this.t('toast.cleared'), this.t('toast.clearedText', { iid }), 'gray');
       } catch (e) {
-        this.toast('Nie udało się usunąć', e.message, 'red');
+        this.toast(this.t('toast.clearFailed'), e.message, 'red');
       }
     },
     /** One-time move of results kept in the browser by older versions into SQLite. */
@@ -310,7 +320,7 @@ function app() {
       try {
         const res = await this.api('/api/v1/reviews/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) });
         try { localStorage.removeItem(LS_REVIEWS); localStorage.removeItem(LS_REVIEWS_LEGACY); } catch { /* ignore */ }
-        if (res.imported) { this.toast('Przeniesiono wyniki do bazy', `${res.imported} review z przeglądarki zapisano w SQLite`, 'green'); await this.loadReviews(); }
+        if (res.imported) { this.toast(this.t('toast.imported'), this.t('toast.importedText', { n: res.imported }), 'green'); await this.loadReviews(); }
       } catch (e) {
         console.warn('Review import failed', e);
       }
@@ -328,14 +338,14 @@ function app() {
     /** AI review status of an MR, shown as a pill/dot. */
     status(pid, mr) {
       const key = `${pid}/${mr.iid}`;
-      if (this.running[key]) return { label: 'analiza…', dot: 'purple pulse' };
-      if (this.errors[key]) return { label: 'błąd review', dot: 'red' };
+      if (this.running[key]) return { label: this.t('status.running'), dot: 'purple pulse' };
+      if (this.errors[key]) return { label: this.t('status.error'), dot: 'red' };
       const r = this.reviews[key];
-      if (!r) return { label: 'bez review', dot: '' };
-      const v = VERDICTS[r.verdict];
-      const label = v ? v.short : 'sprawdzony';
+      if (!r) return { label: this.t('status.none'), dot: '' };
+      const v = this.verdict(r.verdict);
+      const label = v ? v.short : this.t('status.reviewed');
       const outdated = r.sha && mr.sha && r.sha !== mr.sha;
-      return { label: outdated ? `${label} · nieaktualne` : label, dot: v ? v.dot : 'blue', outdated };
+      return { label: outdated ? this.t('status.outdated', { label }) : label, dot: v ? v.dot : 'blue', outdated };
     },
 
     severityCounts(review) {
@@ -458,36 +468,34 @@ function app() {
       catch { return escapeHtml(text).replace(/\n/g, '<br>'); }
     },
     esc: escapeHtml,
-    verdict(v) { return VERDICTS[v] || null; },
-    mergeStatus(s) { return MERGE_STATUS[s] || s || '—'; },
+    verdict(v) {
+      const base = VERDICTS[v];
+      return base ? { ...base, label: this.t(`verdict.${v}.label`), short: this.t(`verdict.${v}.short`) } : null;
+    },
+    mergeStatus(s) { return s && hasMessage(this.lang, `merge.${s}`) ? this.t(`merge.${s}`) : (s || '—'); },
     followupIcon(s) { return { fixed: '✅', open: '⏳', accepted: '👍' }[s] || '•'; },
-    followupLabel(s) { return { fixed: 'Poprawione', open: 'Nadal otwarte', accepted: 'Wyjaśnienie przyjęte' }[s] || s; },
-    followupSummary(f) { return `poprawione ${f.fixed}, otwarte ${f.open}, zaakceptowane ${f.accepted}, nowe ${f.new}`; },
+    followupLabel(s) { return hasMessage(this.lang, `followup.${s}`) ? this.t(`followup.${s}`) : s; },
+    followupSummary(f) { return this.t('followup.summary', f); },
     reqIcon(s) { return { done: '✅', partial: '⚠️', missing: '❌', unclear: '❓' }[s] || '•'; },
     reqSummary(reqs) {
       if (!reqs?.length) return '';
       const done = reqs.filter(r => r.status === 'done').length;
-      return `${done}/${reqs.length} zrealizowanych`;
+      return this.t('req.summary', { done, total: reqs.length });
     },
     relTime(iso) {
       if (!iso) return '—';
       const s = Math.max(0, (this.now - new Date(iso).getTime()) / 1000);
-      if (s < 60) return 'teraz';
+      if (s < 60) return this.t('time.now');
       if (s < 3600) return `${Math.floor(s / 60)}m`;
       if (s < 86400) return `${Math.floor(s / 3600)}h`;
       if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-      return new Date(iso).toLocaleDateString('pl-PL');
+      return new Date(iso).toLocaleDateString(this.locale);
     },
-    fullDate(iso) { return iso ? new Date(iso).toLocaleString('pl-PL') : '—'; },
+    fullDate(iso) { return iso ? new Date(iso).toLocaleString(this.locale) : '—'; },
     elapsed(iso) {
       if (!iso) return '';
       const s = Math.max(0, Math.floor((this.now - new Date(iso).getTime()) / 1000));
       return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    },
-    /** Polish plural: plural(1,'uwaga','uwagi','uwag') -> "1 uwaga", 3 -> "3 uwagi", 5 -> "5 uwag". */
-    plural(n, one, few, many) {
-      const word = n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? few : many;
-      return `${n} ${word}`;
     },
     initials(name) { return (name || '?').split(/[\s/_-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join(''); },
 
@@ -506,7 +514,7 @@ function app() {
         <div class="issue-top"><span class="sev ${escapeHtml(i.severity)}">${escapeHtml(i.severity)}</span><span class="issue-type">${escapeHtml(i.type)}</span>${loc}</div>
         <div class="md">${this.md(i.description)}</div>
         ${i.code ? `<div class="issue-code">${escapeHtml(i.code)}</div>` : ''}
-        ${i.fix ? `<div class="issue-fix"><div class="issue-fix-label">Propozycja poprawki</div><div class="md">${this.md(i.fix)}</div></div>` : ''}
+        ${i.fix ? `<div class="issue-fix"><div class="issue-fix-label">${escapeHtml(this.t('mr.suggestedFix'))}</div><div class="md">${this.md(i.fix)}</div></div>` : ''}
       </div>`;
     },
 
@@ -514,7 +522,7 @@ function app() {
     diffHTML(fi) {
       const f = this.detail?.files[fi];
       if (!f) return '';
-      if (!f.rows.length) return `<div class="diff-empty">${f.deleted_file ? 'Plik usunięty' : 'Brak zmian tekstowych (plik binarny lub zbyt duży)'}</div>`;
+      if (!f.rows.length) return `<div class="diff-empty">${escapeHtml(this.t(f.deleted_file ? 'mr.fileDeleted' : 'mr.noTextChanges'))}</div>`;
       const byLine = {};
       const shown = new Set();
       for (const i of this.fileIssues(f.new_path)) {
@@ -556,12 +564,14 @@ function app() {
     },
 
     // ---------- settings ----------
-    async loadSettings() {
+    /** keepForm: only refresh texts (e.g. after a language change) without dropping unsaved edits. */
+    async loadSettings(keepForm = false) {
       this.settings.loading = true;
       this.settings.error = '';
       try {
         const data = await this.api('/api/v1/settings');
-        this.applySettingsData(data);
+        if (keepForm) { this.settings.groups = data.groups || []; this.settings.items = data.settings || []; }
+        else this.applySettingsData(data);
       } catch (e) {
         this.settings.error = e.message;
       } finally {
@@ -593,10 +603,10 @@ function app() {
     isDirty(s) { return s.key in this.form || !!this.resets[s.key]; },
     get dirtyCount() { return Object.keys(this.form).length + Object.keys(this.resets).length; },
     sourceLabel(s) {
-      if (this.resets[s.key]) return s.env_set ? 'wróci do .env' : 'wróci do domyślnej';
-      return { ui: 'UI', env: '.env', default: 'domyślne' }[s.source] || s.source;
+      if (this.resets[s.key]) return this.t(s.env_set ? 'settings.backToEnv' : 'settings.backToDefault');
+      return hasMessage(this.lang, `settings.source.${s.source}`) ? this.t(`settings.source.${s.source}`) : s.source;
     },
-    secretPlaceholder(s) { return s.is_set ? `ustawiony (${s.value}) – wpisz, aby zmienić` : 'nie ustawiono'; },
+    secretPlaceholder(s) { return s.is_set ? this.t('settings.secretSet', { value: s.value }) : this.t('settings.secretUnset'); },
     discardSettings() { this.form = {}; this.resets = {}; },
     async saveSettings() {
       if (!this.dirtyCount) return;
@@ -610,17 +620,18 @@ function app() {
         this.applySettingsData(data);
         this.tests = {};
         this.config = await this.api('/api/v1/config');
-        if (data.restart_required?.length) this.toast('Zapisano – wymagany restart', `Zmiana ${data.restart_required.join(', ')} zadziała po ponownym uruchomieniu aplikacji.`, 'yellow', 9000);
-        else this.toast('Ustawienia zapisane', `Zastosowano od razu (${changed.length} zm.)`, 'green');
+        if (changed.includes('UI_LANGUAGE')) this.setLang(this.config.ui_language, false); // new default replaces the browser choice
+        if (data.restart_required?.length) this.toast(this.t('toast.savedRestart'), this.t('toast.savedRestartText', { keys: data.restart_required.join(', ') }), 'yellow', 9000);
+        else this.toast(this.t('toast.saved'), this.t('toast.savedText', { n: changed.length }), 'green');
         if (changed.some(k => k.startsWith('GITLAB_'))) { this.lists = {}; await this.loadProjects(true); }
       } catch (e) {
-        this.toast('Nie zapisano ustawień', e.message, 'red', 9000);
+        this.toast(this.t('toast.saveFailed'), e.message, 'red', 9000);
       } finally {
         this.settings.saving = false;
       }
     },
     async testConnection(target) {
-      if (this.dirtyCount) { this.toast('Najpierw zapisz zmiany', 'Test używa zapisanych ustawień.', 'yellow'); return; }
+      if (this.dirtyCount) { this.toast(this.t('toast.saveFirst'), this.t('toast.saveFirstText'), 'yellow'); return; }
       this.tests[target] = { loading: true };
       try {
         const res = await this.api(`/api/v1/settings/test/${target}`, { method: 'POST' });

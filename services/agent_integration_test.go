@@ -3,6 +3,7 @@
 package services
 
 import (
+	"codereviewAI/services/i18n"
 	"context"
 	"os"
 	"os/exec"
@@ -120,7 +121,7 @@ func (s *Store) OrderTotals(ids []int) map[int]float64 {
 			t.Logf("NOTE: agent reported out-of-scope legacy code (will be filtered): %s", is.Description)
 		}
 	}
-	results, task := splitAgentReview(review, diffs)
+	results, task := splitAgentReview(i18n.EN, review, diffs)
 	applyScope(1, results, task, diffs)
 	for _, is := range append(task.Issues, results[0].review.Issues...) {
 		if strings.Contains(is.File, "legacy.go") {
@@ -132,7 +133,7 @@ func (s *Store) OrderTotals(ids []int) map[int]float64 {
 	t.Logf("turns=%d cost=$%.2f verdict(model)=%s verdict(final)=%s score=%d", res.NumTurns, res.TotalCostUSD, review.Verdict, verdict, review.Score)
 	t.Logf("SECURITY: %s", review.SecuritySummary)
 	t.Logf("QUALITY: %s", review.QualitySummary)
-	t.Logf("%s", requirementsLine(task.Requirements))
+	t.Logf("%s", requirementsLine(i18n.EN, task.Requirements))
 	for _, rq := range task.Requirements {
 		t.Logf("REQ %s %s | %s", requirementIcon[rq.Status], rq.Requirement, rq.Evidence)
 	}

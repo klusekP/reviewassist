@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/sirupsen/logrus"
 )
@@ -248,7 +249,7 @@ Branch: %s
 }
 
 // applyStatuses stores the model's verdicts. Findings without a valid answer stay open.
-func (rr *reReview) applyStatuses(statuses []ai.FindingStatus) {
+func (rr *reReview) applyStatuses(lang string, statuses []ai.FindingStatus) {
 	byID := map[string]ai.FindingStatus{}
 	for _, s := range statuses {
 		byID[strings.ToUpper(strings.TrimSpace(s.ID))] = s
@@ -257,7 +258,7 @@ func (rr *reReview) applyStatuses(statuses []ai.FindingStatus) {
 		f := &rr.findings[i]
 		s, ok := byID[f.ID]
 		if !ok {
-			f.Comment = "Brak oceny modelu - pozostawiono jako otwarte."
+			f.Comment = i18n.T(lang, "review.followupNoVerdict")
 			continue
 		}
 		switch st := strings.ToLower(strings.TrimSpace(s.Status)); st {

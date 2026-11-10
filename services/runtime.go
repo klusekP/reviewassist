@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -60,8 +61,14 @@ func (rt *Runtime) Handle(f func(*ReviewService, *gin.Context)) gin.HandlerFunc 
 
 // ---------- settings API ----------
 
+// uiLang is the language of messages returned to the web UI: the Accept-Language header
+// sent by the UI, or the UI_LANGUAGE setting.
+func uiLang(c *gin.Context) string {
+	return i18n.FromAcceptLanguage(c.GetHeader("Accept-Language"), i18n.UILanguage())
+}
+
 func (rt *Runtime) GetSettings(c *gin.Context) {
-	groups, views := rt.settings.View()
+	groups, views := rt.settings.View(uiLang(c))
 	c.JSON(http.StatusOK, gin.H{"groups": groups, "settings": views, "db_path": rt.store.Path()})
 }
 
@@ -71,44 +78,45 @@ func (rt *Runtime) UpdateSettings(c *gin.Context) {
 		Reset  []string          `json:"reset"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Niepoprawne dane: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.invalidData", err.Error())})
 		return
 	}
 	restart, err := rt.settings.Update(body.Values, body.Reset)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.Message(uiLang(c), err)})
 		return
 	}
 	if err := rt.Reload(); err != nil {
 		logrus.Errorf("[Settings] Reload failed: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Zapisano, ale nie udało się zastosować: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.savedNotApplied", err.Error())})
 		return
 	}
 	logrus.Infof("[Settings] Updated %d value(s), reset %d; services reloaded", len(body.Values), len(body.Reset))
-	groups, views := rt.settings.View()
+	groups, views := rt.settings.View(uiLang(c))
 	c.JSON(http.StatusOK, gin.H{"groups": groups, "settings": views, "restart_required": restart, "db_path": rt.store.Path()})
 }
 
 // TestSettings checks a connection with the currently saved settings.
 func (rt *Runtime) TestSettings(c *gin.Context) {
 	target := c.Param("target")
+	lang := uiLang(c)
 	ok, msg := false, ""
 	switch target {
 	case "gitlab":
 		user, err := rt.Review().gitlabService.CurrentUser()
 		if err != nil {
-			msg = "Błąd: " + err.Error()
+			msg = i18n.T(lang, "api.error", err.Error())
 		} else {
-			ok, msg = true, "Zalogowano jako "+user
+			ok, msg = true, i18n.T(lang, "api.loggedInAs", user)
 		}
 	case "jira":
 		j := NewJiraService()
 		if j == nil {
-			msg = "Jira nie jest skonfigurowana (brak adresu lub tokenu)."
+			msg = i18n.T(lang, "api.jiraNotConfigured")
 		} else if name, err := j.Myself(); err != nil {
-			msg = "Błąd: " + err.Error()
+			msg = i18n.T(lang, "api.error", err.Error())
 		} else {
-			ok, msg = true, "Zalogowano jako "+name
+			ok, msg = true, i18n.T(lang, "api.loggedInAs", name)
 		}
 	case "claude":
 		cfg := rt.Review().config
@@ -116,16 +124,16 @@ func (rt *Runtime) TestSettings(c *gin.Context) {
 		defer cancel()
 		out, err := exec.CommandContext(ctx, cfg.AgentBin, "--version").CombinedOutput()
 		if err != nil {
-			msg = fmt.Sprintf("Nie można uruchomić %q: %v", cfg.AgentBin, err)
+			msg = i18n.T(lang, "api.cannotRun", cfg.AgentBin, err)
 		} else {
-			auth := "logowanie claude.ai (subskrypcja)"
+			auth := i18n.T(lang, "api.billingClaudeAI")
 			if cfg.AgentUseAPIKey {
 				auth = "ANTHROPIC_API_KEY"
 			}
-			ok, msg = true, strings.TrimSpace(string(out))+" · rozliczanie: "+auth
+			ok, msg = true, i18n.T(lang, "api.billing", strings.TrimSpace(string(out)), auth)
 		}
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieznany test: " + target})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(lang, "api.unknownTest", target)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": ok, "message": msg})

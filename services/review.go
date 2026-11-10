@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -104,20 +105,20 @@ func (r *ReviewService) scoped(c *gin.Context, needIID bool) (*ReviewService, in
 	if s := c.Param("pid"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.invalidProject")})
 			return nil, 0, false
 		}
 		pid = n
 	}
 	if pid == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No project selected (set GITLAB_PROJECT_ID or use /projects/:pid/...)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.noProject")})
 		return nil, 0, false
 	}
 	iid := 0
 	if needIID {
 		n, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid merge request ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": i18n.T(uiLang(c), "api.invalidMR")})
 			return nil, 0, false
 		}
 		iid = n
@@ -174,7 +175,7 @@ func (r *ReviewService) GetMergeRequests(c *gin.Context) {
 	mrs, err := r.gitlabService.GetMergeRequests(state)
 	if err != nil {
 		logrus.Errorf("Error fetching merge requests of project %d: %v", r.pid(), err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge requests: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMRs", err.Error())})
 		return
 	}
 
@@ -195,7 +196,7 @@ func (r *ReviewService) GetMergeRequest(c *gin.Context) {
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge request: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMR", err.Error())})
 		return
 	}
 
@@ -227,20 +228,20 @@ func (r *ReviewService) ReviewMergeRequest(c *gin.Context) {
 	mr, err := r.gitlabService.GetMergeRequest(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching merge request %d: %v", iid, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching merge request: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchMR", err.Error())})
 		return
 	}
 
 	diffs, err := r.gitlabService.GetMergeRequestDiffs(iid)
 	if err != nil {
 		logrus.Errorf("Error fetching diff for MR %d: %v", iid, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching diff: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchDiff", err.Error())})
 		return
 	}
 
 	reviewable := r.filterDiffs(iid, diffs)
 	if !r.startRunning(iid, len(reviewable)) {
-		c.JSON(http.StatusConflict, gin.H{"error": "Review of this merge request is already running"})
+		c.JSON(http.StatusConflict, gin.H{"error": i18n.T(uiLang(c), "api.reviewRunning")})
 		return
 	}
 
@@ -273,6 +274,8 @@ func (r *ReviewService) GetConfig(c *gin.Context) {
 		"engine":             r.config.Engine,
 		"model":              model,
 		"language":           r.config.Language,
+		"ui_language":        i18n.UILanguage(),
+		"ui_languages":       i18n.UILanguages,
 		"post_to_gitlab":     r.config.PostToGitLab,
 		"gitlab_mode":        r.config.GitLabMode,
 		"jira_enabled":       r.jira != nil,
@@ -313,7 +316,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 	}()
 
 	if len(diffs) == 0 {
-		r.wsHub.BroadcastReview(r.pid(), iid, &ai.CodeReview{Summary: "Brak plików do review (wszystkie pominięte lub usunięte).", Score: 0})
+		r.wsHub.BroadcastReview(r.pid(), iid, &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.noFiles"), Score: 0})
 		return
 	}
 
@@ -362,7 +365,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 
 	// 3. Scope guard + final verdict (never milder than the findings justify)
 	if taskReview == nil {
-		taskReview = &ai.CodeReview{Summary: "Brak oceny całościowej (błąd modelu)."}
+		taskReview = &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.noTaskReview")}
 	}
 	applyScope(iid, results, taskReview, allDiffs)
 
@@ -376,7 +379,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 				logrus.Warnf("[ReReview] MR %d: check of previous findings failed: %v", iid, err)
 			}
 		}
-		rr.applyStatuses(statuses)
+		rr.applyStatuses(r.config.Lang(), statuses)
 		rr.dropRepeated(iid, results, taskReview)
 		stillOpen = rr.openIssues()
 	}
@@ -418,7 +421,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 			aggregated.Followup = rr.followup()
 			aggregated.Summary += "\n\n🔁 " + followupLine(aggregated.Followup)
 		}
-		if line := requirementsLine(taskReview.Requirements); line != "" {
+		if line := requirementsLine(r.config.Lang(), taskReview.Requirements); line != "" {
 			aggregated.Summary += "\n\n📋 " + line
 		}
 		if taskReview.SecuritySummary != "" {
@@ -434,7 +437,7 @@ func (r *ReviewService) runReview(mr *MergeRequest, diffs []Diff, allDiffs []Dif
 		published, err := r.publishToGitLab(mr, refs, results, taskReview, issues, rr)
 		if err != nil {
 			logrus.Errorf("[Review] MR %d: publishing to GitLab failed: %v", iid, err)
-			aggregated.Summary += "\n\n⚠️ Błąd publikacji w GitLab: " + err.Error()
+			aggregated.Summary += "\n\n" + i18n.T(r.config.Lang(), "review.publishError", err.Error())
 		} else {
 			aggregated.Summary += "\n\n" + published
 		}
@@ -535,7 +538,7 @@ func (r *ReviewService) runLLMReview(mr *MergeRequest, refs *DiffRefs, diffs []D
 			if err != nil {
 				logrus.Warnf("[Review] MR %d file %s: %v", iid, d.NewPath, err)
 				res.failed = true
-				res.review = &ai.CodeReview{Summary: "Nie udało się wykonać review tego pliku: " + err.Error()}
+				res.review = &ai.CodeReview{Summary: i18n.T(r.config.Lang(), "review.fileFailed", err.Error())}
 			}
 			results[idx] = res
 			r.progressRunning(iid)
@@ -607,7 +610,7 @@ func (r *ReviewService) GetProjects(c *gin.Context) {
 	projects, err := r.gitlabService.GetProjects(c.Query("refresh") != "")
 	if err != nil {
 		logrus.Errorf("Error fetching projects: %v", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Error fetching projects: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": i18n.T(uiLang(c), "api.fetchProjects", err.Error())})
 		return
 	}
 

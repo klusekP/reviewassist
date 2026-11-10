@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 
 	"github.com/sirupsen/logrus"
 )
@@ -227,7 +228,7 @@ func (r *ReviewService) runAgentReview(mr *MergeRequest, refs *DiffRefs, diffs [
 	if err != nil {
 		return nil, nil, err
 	}
-	results, taskReview := splitAgentReview(review, diffs)
+	results, taskReview := splitAgentReview(r.config.Lang(), review, diffs)
 	return results, taskReview, nil
 }
 
@@ -249,7 +250,7 @@ func parseAgentReview(res *claudeResult) (*ai.CodeReview, error) {
 }
 
 // splitAgentReview assigns findings to reviewed files; everything else becomes MR-level findings.
-func splitAgentReview(review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.CodeReview) {
+func splitAgentReview(lang string, review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.CodeReview) {
 	results := make([]fileResult, len(diffs))
 	index := map[string]int{}
 	for i, d := range diffs {
@@ -269,7 +270,7 @@ func splitAgentReview(review *ai.CodeReview, diffs []Diff) ([]fileResult, *ai.Co
 		}
 	}
 	for i := range results {
-		results[i].review.Summary = fmt.Sprintf("%d uwag(i)", len(results[i].review.Issues))
+		results[i].review.Summary = i18n.T(lang, "review.fileIssues", len(results[i].review.Issues))
 		results[i].review.Score = review.Score
 	}
 	return results, task

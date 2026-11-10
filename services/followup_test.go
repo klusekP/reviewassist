@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 )
 
 func TestParseBotNote(t *testing.T) {
@@ -30,7 +31,7 @@ func newTestReReview() *reReview {
 
 func TestReReviewStatusesAndDedup(t *testing.T) {
 	rr := newTestReReview()
-	rr.applyStatuses([]ai.FindingStatus{
+	rr.applyStatuses(i18n.EN, []ai.FindingStatus{
 		{ID: "P1", Status: "fixed"},
 		{ID: "p2", Status: "open", Line: 42, Comment: "moved"},
 		{ID: "P3", Status: "accepted"},

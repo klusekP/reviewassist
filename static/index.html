@@ -11,6 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="/static/js/i18n.js"></script>
   <script src="/static/js/app.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
@@ -48,14 +49,14 @@
     </div>
 
     <div class="side-actions">
-      <button class="btn-primary-wide" @click="go('#/')"><svg class="icon"><use href="#i-dashboard"/></svg>Przegląd</button>
-      <button class="btn-square" title="Odśwież projekty" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg></button>
-      <button class="btn-square" :class="{ active: route.view === 'settings' }" title="Ustawienia" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
+      <button class="btn-primary-wide" @click="go('#/')"><svg class="icon"><use href="#i-dashboard"/></svg><span x-text="t('nav.overview')"></span></button>
+      <button class="btn-square" :title="t('nav.refreshProjects')" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button class="btn-square" :class="{ active: route.view === 'settings' }" :title="t('common.settings')" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
     </div>
 
     <div class="side-scroll">
       <div class="side-section">
-        <span>Projekty</span>
+        <span x-text="t('common.projects')"></span>
         <span class="faint" x-text="projects.length || ''"></span>
       </div>
 
@@ -65,7 +66,7 @@
         </div>
       </template>
       <template x-if="projectsError">
-        <div class="tree-empty"><span style="color: var(--red)" x-text="'Błąd: ' + projectsError"></span><br /><a href="#/settings" style="text-decoration: underline">Sprawdź ustawienia GitLab</a></div>
+        <div class="tree-empty"><span style="color: var(--red)" x-text="t('common.error', { msg: projectsError })"></span><br /><a href="#/settings" style="text-decoration: underline" x-text="t('nav.checkGitlab')"></a></div>
       </template>
 
       <template x-for="p in visibleTreeProjects" :key="p.id">
@@ -78,9 +79,9 @@
             <span class="count-badge" :class="{ zero: !p.open_mrs }" x-text="p.open_mrs"></span>
           </div>
           <div class="tree-children" x-show="expanded[p.id] || (search && treeMRs(p.id).length)" x-cloak>
-            <template x-if="list(p.id).loading && !list(p.id).items.length"><div class="tree-empty">Ładowanie…</div></template>
+            <template x-if="list(p.id).loading && !list(p.id).items.length"><div class="tree-empty" x-text="t('nav.loading')"></div></template>
             <template x-if="list(p.id).error"><div class="tree-empty" style="color: var(--red)" x-text="list(p.id).error"></div></template>
-            <template x-if="list(p.id).loaded && !list(p.id).items.length"><div class="tree-empty">Brak otwartych MR</div></template>
+            <template x-if="list(p.id).loaded && !list(p.id).items.length"><div class="tree-empty" x-text="t('nav.noOpenMRs')"></div></template>
             <template x-for="m in treeMRs(p.id)" :key="m.iid">
               <div class="tree-mr" :class="{ selected: route.view === 'mr' && route.pid === p.id && route.iid === m.iid }" @click="openMR(p.id, m.iid)" :title="m.title">
                 <span class="dot" :class="status(p.id, m).dot"></span>
@@ -93,15 +94,15 @@
       </template>
 
       <template x-if="hiddenProjectsCount">
-        <button class="tree-more" @click="showAllProjects = true" x-text="'Pokaż projekty bez MR (' + hiddenProjectsCount + ')'"></button>
+        <button class="tree-more" @click="showAllProjects = true" x-text="t('nav.showProjectsWithoutMRs', { n: hiddenProjectsCount })"></button>
       </template>
       <template x-if="showAllProjects && !search">
-        <button class="tree-more" @click="showAllProjects = false">Ukryj projekty bez MR</button>
+        <button class="tree-more" @click="showAllProjects = false" x-text="t('nav.hideProjectsWithoutMRs')"></button>
       </template>
 
       <template x-if="runningList.length">
         <div>
-          <div class="side-section"><span>W toku</span></div>
+          <div class="side-section"><span x-text="t('nav.running')"></span></div>
           <template x-for="r in runningList" :key="r.key">
             <div class="recent-item" @click="openMR(r.pid, r.iid)">
               <span class="dot purple pulse"></span>
@@ -114,7 +115,7 @@
 
       <template x-if="recentReviews.length">
         <div>
-          <div class="side-section"><span>Ostatnie review</span></div>
+          <div class="side-section"><span x-text="t('common.recentReviews')"></span></div>
           <template x-for="r in recentReviews.slice(0, 6)" :key="r.key">
             <div class="recent-item" @click="openMR(r.pid, r.iid)">
               <span class="dot" :class="verdict(r.verdict)?.dot || 'blue'"></span>
@@ -129,18 +130,19 @@
     <div class="side-footer">
       <label class="search-box">
         <svg class="icon icon-sm"><use href="#i-search"/></svg>
-        <input x-ref="search" x-model="search" placeholder="Szukaj…" title="Szukaj projektu lub merge requesta" />
+        <input x-ref="search" x-model="search" :placeholder="t('nav.search')" :title="t('nav.searchTitle')" />
         <span class="kbd">Ctrl+K</span>
       </label>
       <div class="footer-row">
-        <span class="pill-outline" :title="'Silnik: ' + (config.engine || '?') + (config.model ? ' · ' + config.model : '')">
+        <span class="pill-outline" :title="t('nav.engine', { engine: (config.engine || '?') + (config.model ? ' · ' + config.model : '') })">
           <span class="dot" :class="wsConnected ? 'green' : 'red'"></span>
           <span class="ellipsis" x-text="(config.engine || '…') + (config.model ? ' · ' + config.model : '')"></span>
         </span>
-        <span class="pill-outline" x-show="config.jira_enabled" title="Zadania z Jiry są używane w review">jira</span>
-        <span class="pill-outline" x-text="config.language || 'pl'"></span>
-        <button class="icon-btn ml-auto" @click="go('#/settings')" title="Ustawienia"><svg class="icon"><use href="#i-gear"/></svg></button>
-        <button class="icon-btn" @click="toggleTheme()" :title="theme === 'dark' ? 'Jasny motyw' : 'Ciemny motyw'">
+        <span class="pill-outline" x-show="config.jira_enabled" :title="t('nav.jiraTitle')">jira</span>
+        <span class="pill-outline" :title="t('nav.reviewLanguage', { lang: config.language || 'pl' })" x-text="config.language || 'pl'"></span>
+        <button class="icon-btn ml-auto" :title="t('common.settings')" @click="go('#/settings')"><svg class="icon"><use href="#i-gear"/></svg></button>
+        <button class="icon-btn mono" @click="cycleLang()" :title="t('lang.switch', { name: t('lang.name') })" x-text="lang.toUpperCase()"></button>
+        <button class="icon-btn" @click="toggleTheme()" :title="t(theme === 'dark' ? 'nav.lightTheme' : 'nav.darkTheme')">
           <svg class="icon"><use :href="theme === 'dark' ? '#i-moon' : '#i-sun'"/></svg>
         </button>
       </div>
@@ -154,23 +156,23 @@
     <template x-if="route.view === 'dashboard'">
       <div style="display: contents">
         <div class="page-head">
-          <div class="page-title">Przegląd</div>
+          <div class="page-title" x-text="t('nav.overview')"></div>
           <div class="head-actions">
-            <button class="btn-ghost" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg>Odśwież</button>
+            <button class="btn-ghost" @click="loadProjects(true)"><svg class="icon"><use href="#i-refresh"/></svg><span x-text="t('common.refresh')"></span></button>
           </div>
         </div>
         <div class="content">
           <div class="tiles">
-            <div class="tile"><div class="label">Projekty</div><div class="value" x-text="projects.length"></div></div>
-            <div class="tile"><div class="label">Otwarte MR</div><div class="value" x-text="totalOpen"></div></div>
-            <div class="tile"><div class="label">Review w toku</div><div class="value" x-text="runningList.length"></div></div>
-            <div class="tile"><div class="label">Wykonane review</div><div class="value" x-text="recentReviews.length"></div></div>
+            <div class="tile"><div class="label" x-text="t('common.projects')"></div><div class="value" x-text="projects.length"></div></div>
+            <div class="tile"><div class="label" x-text="t('common.openMRs')"></div><div class="value" x-text="totalOpen"></div></div>
+            <div class="tile"><div class="label" x-text="t('dash.runningReviews')"></div><div class="value" x-text="runningList.length"></div></div>
+            <div class="tile"><div class="label" x-text="t('dash.doneReviews')"></div><div class="value" x-text="recentReviews.length"></div></div>
           </div>
 
-          <div class="section-title">Projekty</div>
+          <div class="section-title" x-text="t('common.projects')"></div>
           <div class="table-card">
             <table class="grid">
-              <thead><tr><th>Projekt</th><th class="hide-md">Główna gałąź</th><th class="num">Otwarte MR</th><th class="num">Aktywność</th></tr></thead>
+              <thead><tr><th x-text="t('common.project')"></th><th class="hide-md" x-text="t('dash.defaultBranch')"></th><th class="num" x-text="t('common.openMRs')"></th><th class="num" x-text="t('dash.activity')"></th></tr></thead>
               <tbody>
                 <template x-if="projectsLoading && !projects.length">
                   <tr><td colspan="4"><div class="skeleton" style="width: 40%"></div></td></tr>
@@ -189,23 +191,23 @@
               </tbody>
             </table>
             <template x-if="!projectsLoading && !projects.length && !projectsError">
-              <div class="empty"><h3>Brak projektów</h3>Token GitLab nie ma dostępu do żadnego projektu albo lista projektów jest pusta.<br /><a class="btn-primary" href="#/settings">Otwórz ustawienia</a></div>
+              <div class="empty"><h3 x-text="t('dash.noProjects')"></h3><span x-text="t('dash.noProjectsText')"></span><br /><a class="btn-primary" href="#/settings" x-text="t('dash.openSettings')"></a></div>
             </template>
             <template x-if="projectsError">
-              <div class="empty"><h3>Nie udało się połączyć z GitLab</h3><span x-text="projectsError"></span><br /><a class="btn-primary" href="#/settings">Skonfiguruj GitLab</a></div>
+              <div class="empty"><h3 x-text="t('dash.gitlabFailed')"></h3><span x-text="projectsError"></span><br /><a class="btn-primary" href="#/settings" x-text="t('dash.configureGitlab')"></a></div>
             </template>
           </div>
 
           <template x-if="recentReviews.length">
             <div>
-              <div class="section-title">Ostatnie review</div>
+              <div class="section-title" x-text="t('common.recentReviews')"></div>
               <div class="table-card">
                 <table class="grid">
-                  <thead><tr><th>Werdykt</th><th>Merge request</th><th class="hide-md">Projekt</th><th class="num">Ocena</th><th class="num">Kiedy</th></tr></thead>
+                  <thead><tr><th x-text="t('dash.verdict')"></th><th>Merge request</th><th class="hide-md" x-text="t('common.project')"></th><th class="num" x-text="t('common.score')"></th><th class="num" x-text="t('dash.when')"></th></tr></thead>
                   <tbody>
                     <template x-for="r in recentReviews.slice(0, 12)" :key="r.key">
                       <tr @click="openMR(r.pid, r.iid)">
-                        <td><span class="status-pill"><span class="dot" :class="verdict(r.verdict)?.dot || 'blue'"></span><span x-text="verdict(r.verdict)?.short || 'sprawdzony'"></span></span></td>
+                        <td><span class="status-pill"><span class="dot" :class="verdict(r.verdict)?.dot || 'blue'"></span><span x-text="verdict(r.verdict)?.short || t('status.reviewed')"></span></span></td>
                         <td><div class="mr-title"><span class="t" x-text="r.title"></span><span class="faint mono" x-text="'!' + r.iid"></span></div></td>
                         <td class="hide-md muted" x-text="project(r.pid)?.name || r.pid"></td>
                         <td class="num" x-text="r.score ? r.score + '/10' : '—'"></td>
@@ -225,18 +227,18 @@
     <template x-if="route.view === 'project'">
       <div style="display: contents">
         <div class="page-head">
-          <div class="page-title ellipsis" x-text="currentProject?.name || ('Projekt ' + route.pid)"></div>
+          <div class="page-title ellipsis" x-text="currentProject?.name || t('list.projectN', { pid: route.pid })"></div>
           <div class="segmented">
-            <button :class="{ on: listState === 'opened' }" @click="setListState('opened')">Otwarte <span class="n" x-text="list(route.pid, 'opened').items.length"></span></button>
-            <button :class="{ on: listState === 'merged' }" @click="setListState('merged')">Scalone</button>
-            <button :class="{ on: listState === 'closed' }" @click="setListState('closed')">Zamknięte</button>
+            <button :class="{ on: listState === 'opened' }" @click="setListState('opened')"><span x-text="t('list.opened')"></span> <span class="n" x-text="list(route.pid, 'opened').items.length"></span></button>
+            <button :class="{ on: listState === 'merged' }" @click="setListState('merged')" x-text="t('list.merged')"></button>
+            <button :class="{ on: listState === 'closed' }" @click="setListState('closed')" x-text="t('list.closed')"></button>
           </div>
           <div class="head-actions">
             <label class="search-box head-search">
               <svg class="icon icon-sm"><use href="#i-search"/></svg>
-              <input x-model="listQuery" placeholder="Szukaj tytułu, !id, gałęzi, autora…" />
+              <input x-model="listQuery" :placeholder="t('list.search')" />
             </label>
-            <button class="btn-ghost" @click="refreshCurrent()"><svg class="icon"><use href="#i-refresh"/></svg><span class="hide-md">Odśwież</span></button>
+            <button class="btn-ghost" @click="refreshCurrent()"><svg class="icon"><use href="#i-refresh"/></svg><span class="hide-md" x-text="t('common.refresh')"></span></button>
             <a class="btn-ghost" :href="currentProject?.web_url + '/-/merge_requests'" target="_blank" rel="noopener" x-show="currentProject"><svg class="icon"><use href="#i-external"/></svg><span class="hide-md">GitLab</span></a>
           </div>
         </div>
@@ -245,7 +247,7 @@
             <table class="grid fixed">
               <colgroup><col style="width: 160px" /><col /><col class="hide-md" style="width: 280px" /><col class="hide-md" style="width: 160px" /><col style="width: 76px" /><col style="width: 112px" /><col style="width: 128px" /></colgroup>
               <thead>
-                <tr><th>Status</th><th>Merge request</th><th class="hide-md">Gałęzie</th><th class="hide-md">Autor</th><th class="num">Ocena</th><th class="num">Uwagi</th><th class="num">Aktualizacja</th></tr>
+                <tr><th x-text="t('list.status')"></th><th>Merge request</th><th class="hide-md" x-text="t('common.branches')"></th><th class="hide-md" x-text="t('common.author')"></th><th class="num" x-text="t('common.score')"></th><th class="num" x-text="t('list.issues')"></th><th class="num" x-text="t('list.updated')"></th></tr>
               </thead>
               <tbody>
                 <template x-for="n in (list(route.pid, listState).loading && !list(route.pid, listState).items.length ? 5 : 0)" :key="'sk' + n">
@@ -258,7 +260,7 @@
                       <div class="mr-title"><span class="t" x-text="m.title"></span><span class="faint mono" x-text="'!' + m.iid"></span></div>
                       <div class="mr-sub" x-show="m.draft || m.has_conflicts || m.labels.length">
                         <span class="chip draft" x-show="m.draft">draft</span>
-                        <span class="chip danger" x-show="m.has_conflicts">konflikty</span>
+                        <span class="chip danger" x-show="m.has_conflicts" x-text="t('common.conflicts')"></span>
                         <template x-for="l in m.labels.slice(0, 4)" :key="l"><span class="chip label" x-text="l"></span></template>
                       </div>
                     </td>
@@ -282,10 +284,10 @@
               </tbody>
             </table>
             <template x-if="list(route.pid, listState).error">
-              <div class="empty"><h3>Nie udało się pobrać MR</h3><span x-text="list(route.pid, listState).error"></span></div>
+              <div class="empty"><h3 x-text="t('common.fetchMRFailed')"></h3><span x-text="list(route.pid, listState).error"></span></div>
             </template>
             <template x-if="list(route.pid, listState).loaded && !currentList.length">
-              <div class="empty"><h3 x-text="listQuery ? 'Brak wyników' : 'Brak merge requestów'"></h3><span x-show="!listQuery">W tym projekcie nie ma MR w tym stanie.</span></div>
+              <div class="empty"><h3 x-text="t(listQuery ? 'list.noResults' : 'list.noMRs')"></h3><span x-show="!listQuery" x-text="t('list.noMRsText')"></span></div>
             </template>
           </div>
         </div>
@@ -299,7 +301,7 @@
           <div class="content"><div class="skeleton" style="width: 40%; height: 22px"></div><div class="skeleton" style="width: 60%; margin-top: 14px"></div></div>
         </template>
         <template x-if="detailError && !detail">
-          <div class="content"><div class="empty"><h3>Nie udało się pobrać MR</h3><span x-text="detailError"></span></div></div>
+          <div class="content"><div class="empty"><h3 x-text="t('common.fetchMRFailed')"></h3><span x-text="detailError"></span></div></div>
         </template>
 
         <template x-if="detail">
@@ -318,10 +320,10 @@
                     <span class="sep">·</span>
                     <span class="mono"><span class="add" x-text="'+' + detail.add"></span> <span class="del" x-text="'−' + detail.del"></span></span>
                     <span class="sep">·</span>
-                    <span class="faint" x-text="'zaktualizowano ' + relTime(detail.mr.updated_at)"></span>
+                    <span class="faint" x-text="t('mr.updated', { when: relTime(detail.mr.updated_at) })"></span>
                     <span class="chip draft" x-show="detail.mr.draft">draft</span>
-                    <span class="chip danger" x-show="detail.mr.has_conflicts">konflikty</span>
-                    <span class="chip warn" x-show="status(detail.pid, detail.mr).outdated" title="Od czasu review pojawiły się nowe commity">nowe commity od review</span>
+                    <span class="chip danger" x-show="detail.mr.has_conflicts" x-text="t('common.conflicts')"></span>
+                    <span class="chip warn" x-show="status(detail.pid, detail.mr).outdated" :title="t('mr.newCommitsTitle')" x-text="t('mr.newCommits')"></span>
                   </div>
                 </div>
                 <span class="status-pill"><span class="dot" :class="status(detail.pid, detail.mr).dot"></span><span x-text="status(detail.pid, detail.mr).label"></span></span>
@@ -330,26 +332,26 @@
               <div class="tabs-row">
                 <div class="tabs">
                   <button class="tab" :class="{ on: route.tab === 'review' }" @click="setTab('review')">Review <span class="n" x-show="currentReview" x-text="(currentReview?.issues || []).length"></span></button>
-                  <button class="tab" :class="{ on: route.tab === 'changes' }" @click="setTab('changes')">Zmiany <span class="n" x-text="detail.files.length"></span></button>
-                  <button class="tab" :class="{ on: route.tab === 'description' }" @click="setTab('description')">Opis</button>
+                  <button class="tab" :class="{ on: route.tab === 'changes' }" @click="setTab('changes')"><span x-text="t('mr.tabChanges')"></span> <span class="n" x-text="detail.files.length"></span></button>
+                  <button class="tab" :class="{ on: route.tab === 'description' }" @click="setTab('description')" x-text="t('mr.tabDescription')"></button>
                 </div>
                 <div class="head-actions">
                   <button class="btn-primary" @click="startReview(detail.pid, detail.iid)" :disabled="!!currentRunning">
                     <template x-if="currentRunning"><span class="spinner" style="border-top-color: var(--primary-text)"></span></template>
                     <template x-if="!currentRunning"><svg class="icon icon-sm" style="fill: currentColor"><use href="#i-play"/></svg></template>
-                    <span x-text="currentRunning ? 'Analiza…' : (currentReview ? 'Ponów review' : 'Uruchom review')"></span>
+                    <span x-text="t(currentRunning ? 'mr.analyzing' : (currentReview ? 'mr.rerun' : 'common.runReview'))"></span>
                   </button>
                   <a class="btn-outline" :href="detail.mr.web_url" target="_blank" rel="noopener"><svg class="icon icon-sm"><use href="#i-external"/></svg>GitLab</a>
-                  <button class="btn-ghost danger" x-show="currentReview && !currentRunning" @click="clearReview(detail.pid, detail.iid)" title="Usuń zapisane wyniki review tego MR z bazy"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+                  <button class="btn-ghost danger" x-show="currentReview && !currentRunning" @click="clearReview(detail.pid, detail.iid)" :title="t('mr.deleteTitle')"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
                 </div>
               </div>
 
               <template x-if="currentRunning">
                 <div class="progress">
                   <span class="dot purple pulse"></span>
-                  <b x-text="(currentRunning.engine || config.engine) === 'claude-code' ? 'Agent analizuje MR' : 'Analiza plików'"></b>
-                  <span class="faint" x-show="(currentRunning.engine || config.engine) !== 'claude-code' && currentRunning.total" x-text="'plik ' + (currentRunning.done || 0) + ' z ' + currentRunning.total"></span>
-                  <span class="faint" x-show="(currentRunning.engine || config.engine) === 'claude-code'" x-text="(currentRunning.total || '?') + ' plików · czyta kod, zadanie i dokumentację'"></span>
+                  <b x-text="t((currentRunning.engine || config.engine) === 'claude-code' ? 'mr.agentAnalyzing' : 'mr.analyzingFiles')"></b>
+                  <span class="faint" x-show="(currentRunning.engine || config.engine) !== 'claude-code' && currentRunning.total" x-text="t('mr.fileProgress', { done: currentRunning.done || 0, total: currentRunning.total })"></span>
+                  <span class="faint" x-show="(currentRunning.engine || config.engine) === 'claude-code'" x-text="t('mr.agentProgress', { files: currentRunning.total ? tn('common.files', currentRunning.total) : '?' })"></span>
                   <div class="bar" :class="{ indeterminate: (currentRunning.engine || config.engine) === 'claude-code' || !currentRunning.total }">
                     <i :style="currentRunning.total ? 'width:' + Math.round(100 * (currentRunning.done || 0) / currentRunning.total) + '%' : ''"></i>
                   </div>
@@ -364,16 +366,16 @@
                 <div class="detail-body">
                   <template x-if="currentError && !currentRunning">
                     <div class="card" style="border-color: color-mix(in srgb, var(--red) 45%, var(--border))">
-                      <h3 class="del">Ostatnie review nie powiodło się</h3>
+                      <h3 class="del" x-text="t('mr.lastFailed')"></h3>
                       <div class="mono muted" style="white-space: pre-wrap" x-text="currentError"></div>
                     </div>
                   </template>
 
                   <template x-if="!currentReview && !currentRunning">
                     <div class="card"><div class="empty">
-                      <h3>Ten MR nie ma jeszcze review</h3>
-                      <span x-text="config.engine === 'claude-code' ? 'Agent sklonuje gałąź, przeczyta zadanie z Jiry i dokumentację, a uwagi doda jako szkic review w GitLab.' : 'Model przeanalizuje zmienione pliki i doda uwagi jako szkic review w GitLab.'"></span><br />
-                      <button class="btn-primary" @click="startReview(detail.pid, detail.iid)"><svg class="icon icon-sm" style="fill: currentColor"><use href="#i-play"/></svg>Uruchom review</button>
+                      <h3 x-text="t('mr.noReview')"></h3>
+                      <span x-text="t(config.engine === 'claude-code' ? 'mr.noReviewAgent' : 'mr.noReviewLLM')"></span><br />
+                      <button class="btn-primary" @click="startReview(detail.pid, detail.iid)"><svg class="icon icon-sm" style="fill: currentColor"><use href="#i-play"/></svg><span x-text="t('common.runReview')"></span></button>
                     </div></div>
                   </template>
 
@@ -382,26 +384,26 @@
                       <div class="verdict" :class="currentReview.verdict">
                         <div class="v-icon" x-text="verdict(currentReview.verdict)?.icon || '🤖'"></div>
                         <div style="min-width: 0">
-                          <div class="v-title" x-text="verdict(currentReview.verdict)?.label || 'Review zakończone'"></div>
+                          <div class="v-title" x-text="verdict(currentReview.verdict)?.label || t('mr.reviewDone')"></div>
                           <div class="v-sub">
-                            <span x-text="'Review z ' + fullDate(currentReview.timestamp)"></span>
-                            <span x-show="reqSummary(currentReview.requirements)" x-text="' · wymagania: ' + reqSummary(currentReview.requirements)"></span>
+                            <span x-text="t('mr.reviewFrom', { date: fullDate(currentReview.timestamp) })"></span>
+                            <span x-show="reqSummary(currentReview.requirements)" x-text="t('mr.requirements', { summary: reqSummary(currentReview.requirements) })"></span>
                             <span x-show="currentReview.engine" x-text="' · ' + currentReview.engine"></span>
-                            <span x-show="!viewingOldReview && status(detail.pid, detail.mr).outdated" class="del"> · od tego czasu pojawiły się nowe commity</span>
-                            <span x-show="viewingOldReview" class="del"> · starsza wersja – <a href="#" @click.prevent="historyPick = null" style="text-decoration: underline">pokaż najnowszą</a></span>
+                            <span x-show="!viewingOldReview && status(detail.pid, detail.mr).outdated" class="del" x-text="t('mr.newCommitsSince')"></span>
+                            <span x-show="viewingOldReview" class="del"><span x-text="t('mr.olderVersion')"></span><a href="#" @click.prevent="historyPick = null" style="text-decoration: underline" x-text="t('mr.showLatest')"></a></span>
                           </div>
                         </div>
                         <div class="score"><b x-text="currentReview.score || '—'"></b><span>/10</span></div>
                       </div>
 
                       <div class="card">
-                        <h3>Podsumowanie</h3>
+                        <h3 x-text="t('mr.summary')"></h3>
                         <div class="md" x-html="md(currentReview.summary)"></div>
                       </div>
 
                       <template x-if="(currentReview.requirements || []).length">
                         <div class="card">
-                          <h3><svg class="icon icon-sm"><use href="#i-list"/></svg>Realizacja wymagań z zadania <span class="faint" x-text="'· ' + reqSummary(currentReview.requirements)"></span></h3>
+                          <h3><svg class="icon icon-sm"><use href="#i-list"/></svg><span x-text="t('mr.requirementsTitle')"></span> <span class="faint" x-text="'· ' + reqSummary(currentReview.requirements)"></span></h3>
                           <table class="req"><tbody>
                             <template x-for="(rq, i) in currentReview.requirements" :key="i">
                               <tr><td x-text="reqIcon(rq.status)"></td><td x-text="rq.requirement"></td><td class="ev" x-text="rq.evidence"></td></tr>
@@ -412,7 +414,7 @@
 
                       <template x-if="currentReview.followup && (currentReview.followup.items || []).length">
                         <div class="card">
-                          <h3>🔁 Ponowne review <span class="faint" x-text="'· zmiany od ' + (currentReview.followup.since_sha || '').slice(0, 8) + ' · ' + followupSummary(currentReview.followup)"></span></h3>
+                          <h3><span x-text="t('mr.reReview')"></span> <span class="faint" x-text="t('mr.reReviewSince', { sha: (currentReview.followup.since_sha || '').slice(0, 8), summary: followupSummary(currentReview.followup) })"></span></h3>
                           <table class="req"><tbody>
                             <template x-for="it in currentReview.followup.items" :key="it.id">
                               <tr>
@@ -433,18 +435,18 @@
 
                       <div class="card-grid" x-show="currentReview.security_summary || currentReview.quality_summary" style="margin-bottom: 14px">
                         <div class="card" x-show="currentReview.security_summary">
-                          <h3><svg class="icon icon-sm"><use href="#i-shield"/></svg>Bezpieczeństwo</h3>
+                          <h3><svg class="icon icon-sm"><use href="#i-shield"/></svg><span x-text="t('mr.security')"></span></h3>
                           <div class="md" x-html="md(currentReview.security_summary)"></div>
                         </div>
                         <div class="card" x-show="currentReview.quality_summary">
-                          <h3><svg class="icon icon-sm"><use href="#i-bolt"/></svg>Jakość, ilość kodu i wydajność</h3>
+                          <h3><svg class="icon icon-sm"><use href="#i-bolt"/></svg><span x-text="t('mr.quality')"></span></h3>
                           <div class="md" x-html="md(currentReview.quality_summary)"></div>
                         </div>
                       </div>
 
-                      <div class="section-title" style="margin-top: 8px">Uwagi</div>
+                      <div class="section-title" style="margin-top: 8px" x-text="t('mr.issues')"></div>
                       <div class="filters">
-                        <button class="filter" :class="{ on: issueFilter === 'all' }" @click="issueFilter = 'all'">Wszystkie <span class="mono" x-text="(currentReview.issues || []).length"></span></button>
+                        <button class="filter" :class="{ on: issueFilter === 'all' }" @click="issueFilter = 'all'"><span x-text="t('mr.all')"></span> <span class="mono" x-text="(currentReview.issues || []).length"></span></button>
                         <template x-for="s in ['critical', 'high', 'medium', 'low']" :key="s">
                           <button class="filter" :class="{ on: issueFilter === s }" @click="issueFilter = s" x-show="severityCounts(currentReview)[s]">
                             <span class="sev" :class="s" x-text="s"></span><span class="mono" x-text="severityCounts(currentReview)[s]"></span>
@@ -452,29 +454,29 @@
                         </template>
                       </div>
                       <template x-if="!(currentReview.issues || []).length">
-                        <div class="card"><div class="empty" style="padding: 24px"><h3>Brak uwag</h3>Agent nie znalazł problemów w zmienionym kodzie.</div></div>
+                        <div class="card"><div class="empty" style="padding: 24px"><h3 x-text="t('mr.noIssues')"></h3><span x-text="t('mr.noIssuesText')"></span></div></div>
                       </template>
                       <template x-for="g in issueGroups" :key="g.file">
                         <div class="file-group">
                           <div class="file-group-head">
                             <svg class="icon icon-sm"><use :href="g.file ? '#i-file' : '#i-list'"/></svg>
-                            <span x-text="g.file || 'Uwagi ogólne do MR'"></span>
+                            <span x-text="g.file || t('mr.generalIssues')"></span>
                             <span class="faint" x-text="'· ' + g.issues.length"></span>
                           </div>
                           <template x-for="(i, idx) in g.issues" :key="idx">
-                            <div @click="gotoIssue(i)" :style="i.file && i.line ? 'cursor: pointer' : ''" :title="i.file && i.line ? 'Pokaż w zmianach' : ''" x-html="issueCardHTML(i, true)"></div>
+                            <div @click="gotoIssue(i)" :style="i.file && i.line ? 'cursor: pointer' : ''" :title="i.file && i.line ? t('mr.showInChanges') : ''" x-html="issueCardHTML(i, true)"></div>
                           </template>
                         </div>
                       </template>
 
                       <template x-if="history.length > 1">
                         <div class="card" style="margin-top: 8px">
-                          <h3><svg class="icon icon-sm"><use href="#i-history"/></svg>Historia review <span class="faint" x-text="'· ' + history.length"></span></h3>
+                          <h3><svg class="icon icon-sm"><use href="#i-history"/></svg><span x-text="t('mr.history')"></span> <span class="faint" x-text="'· ' + history.length"></span></h3>
                           <div class="history">
                             <template x-for="(h, hi) in history" :key="h.id">
                               <button class="history-item" :class="{ on: (historyPick || history[0].id) === h.id }" @click="historyPick = hi === 0 ? null : h.id; issueFilter = 'all'">
                                 <span class="dot" :class="verdict(h.verdict)?.dot || 'blue'"></span>
-                                <span x-text="verdict(h.verdict)?.short || 'sprawdzony'"></span>
+                                <span x-text="verdict(h.verdict)?.short || t('status.reviewed')"></span>
                                 <span class="mono faint" x-text="(h.score || '—') + '/10'"></span>
                                 <span class="faint" x-text="fullDate(h.timestamp)"></span>
                                 <span class="mono faint ml-auto" x-text="(h.sha || '').slice(0, 8)"></span>
@@ -486,7 +488,7 @@
 
                       <template x-if="(currentReview.suggestions || []).length">
                         <div class="card" style="margin-top: 8px">
-                          <h3>Sugestie</h3>
+                          <h3 x-text="t('mr.suggestions')"></h3>
                           <div class="md"><ul><template x-for="(s, i) in currentReview.suggestions" :key="i"><li x-html="md(s)"></li></template></ul></div>
                         </div>
                       </template>
@@ -499,7 +501,7 @@
               <template x-if="route.tab === 'changes'">
                 <div class="changes">
                   <div class="file-tree">
-                    <div class="ft-summary"><span x-text="detail.files.length + ' plików'"></span> · <span class="add mono" x-text="'+' + detail.add"></span> <span class="del mono" x-text="'−' + detail.del"></span></div>
+                    <div class="ft-summary"><span x-text="tn('common.files', detail.files.length)"></span> · <span class="add mono" x-text="'+' + detail.add"></span> <span class="del mono" x-text="'−' + detail.del"></span></div>
                     <template x-for="(f, fi) in detail.files" :key="fi">
                       <div class="ft-item" @click="gotoFile(fi)" :title="f.new_path">
                         <svg class="icon icon-sm faint"><use href="#i-file"/></svg>
@@ -512,17 +514,17 @@
                     </template>
                   </div>
                   <div style="min-width: 0">
-                    <template x-if="!detail.files.length"><div class="card"><div class="empty">Brak zmian w tym MR.</div></div></template>
+                    <template x-if="!detail.files.length"><div class="card"><div class="empty" x-text="t('mr.noChanges')"></div></div></template>
                     <template x-for="(f, fi) in detail.files" :key="fi">
                       <div class="diff-file" :id="'f-' + fi">
                         <div class="diff-file-head" @click="collapsed[fi] = !collapsed[fi]">
                           <span class="tree-chevron" :class="{ open: !collapsed[fi] }"><svg class="icon icon-sm"><use href="#i-chevron"/></svg></span>
                           <span class="path ellipsis" x-text="f.new_path"></span>
-                          <span class="chip ok" x-show="f.new_file">nowy</span>
-                          <span class="chip danger" x-show="f.deleted_file">usunięty</span>
-                          <span class="chip" x-show="f.renamed_file" x-text="'z ' + f.old_path"></span>
+                          <span class="chip ok" x-show="f.new_file" x-text="t('mr.newFile')"></span>
+                          <span class="chip danger" x-show="f.deleted_file" x-text="t('mr.deletedFile')"></span>
+                          <span class="chip" x-show="f.renamed_file" x-text="t('mr.renamedFrom', { path: f.old_path })"></span>
                           <span class="stats">
-                            <span class="del" x-show="fileIssues(f.new_path).length" x-text="plural(fileIssues(f.new_path).length, 'uwaga', 'uwagi', 'uwag')"></span>
+                            <span class="del" x-show="fileIssues(f.new_path).length" x-text="tn('common.issues', fileIssues(f.new_path).length)"></span>
                             <span class="add" x-text="'+' + f.add"></span><span class="del" x-text="'−' + f.del"></span>
                           </span>
                         </div>
@@ -537,23 +539,23 @@
               <template x-if="route.tab === 'description'">
                 <div class="detail-body">
                   <div class="card">
-                    <h3>Opis merge requesta</h3>
+                    <h3 x-text="t('mr.descriptionTitle')"></h3>
                     <div class="md" x-show="detail.mr.description" x-html="md(detail.mr.description)"></div>
-                    <div class="faint" x-show="!detail.mr.description">Brak opisu.</div>
+                    <div class="faint" x-show="!detail.mr.description" x-text="t('mr.noDescription')"></div>
                   </div>
                   <div class="card">
-                    <h3>Informacje</h3>
+                    <h3 x-text="t('mr.info')"></h3>
                     <dl class="info-grid">
-                      <dt>Autor</dt><dd x-text="detail.mr.author?.name + (detail.mr.author?.username ? ' (@' + detail.mr.author.username + ')' : '')"></dd>
-                      <dt>Gałęzie</dt><dd><span class="branch" x-text="detail.mr.source_branch"></span> → <span class="branch" x-text="detail.mr.target_branch"></span></dd>
-                      <dt>Status scalania</dt><dd x-text="mergeStatus(detail.mr.detailed_merge_status)"></dd>
+                      <dt x-text="t('common.author')"></dt><dd x-text="detail.mr.author?.name + (detail.mr.author?.username ? ' (@' + detail.mr.author.username + ')' : '')"></dd>
+                      <dt x-text="t('common.branches')"></dt><dd><span class="branch" x-text="detail.mr.source_branch"></span> → <span class="branch" x-text="detail.mr.target_branch"></span></dd>
+                      <dt x-text="t('mr.mergeStatus')"></dt><dd x-text="mergeStatus(detail.mr.detailed_merge_status)"></dd>
                       <dt>Pipeline</dt><dd x-text="detail.mr.pipeline_status || '—'"></dd>
-                      <dt>Komentarze</dt><dd x-text="detail.mr.user_notes_count"></dd>
-                      <dt>Etykiety</dt><dd><template x-for="l in detail.mr.labels" :key="l"><span class="chip label" style="margin-right: 4px" x-text="l"></span></template><span class="faint" x-show="!detail.mr.labels.length">—</span></dd>
-                      <dt>Utworzono</dt><dd x-text="fullDate(detail.mr.created_at)"></dd>
-                      <dt>Zaktualizowano</dt><dd x-text="fullDate(detail.mr.updated_at)"></dd>
+                      <dt x-text="t('mr.comments')"></dt><dd x-text="detail.mr.user_notes_count"></dd>
+                      <dt x-text="t('mr.labels')"></dt><dd><template x-for="l in detail.mr.labels" :key="l"><span class="chip label" style="margin-right: 4px" x-text="l"></span></template><span class="faint" x-show="!detail.mr.labels.length">—</span></dd>
+                      <dt x-text="t('mr.created')"></dt><dd x-text="fullDate(detail.mr.created_at)"></dd>
+                      <dt x-text="t('mr.updatedAt')"></dt><dd x-text="fullDate(detail.mr.updated_at)"></dd>
                       <dt>Commit</dt><dd class="mono" x-text="(detail.mr.sha || '').slice(0, 12)"></dd>
-                      <dt>Komentarze AI</dt><dd x-text="config.post_to_gitlab ? (config.gitlab_mode === 'comment' ? 'publikowane od razu jako komentarze' : 'zapisywane jako szkic review (Submit review w GitLab)') : 'wyłączone'"></dd>
+                      <dt x-text="t('mr.aiComments')"></dt><dd x-text="t(config.post_to_gitlab ? (config.gitlab_mode === 'comment' ? 'mr.aiCommentsComment' : 'mr.aiCommentsDraft') : 'mr.aiCommentsOff')"></dd>
                     </dl>
                   </div>
                 </div>
@@ -569,26 +571,26 @@
       <div style="display: contents">
         <div class="page-head">
           <div style="min-width: 0">
-            <div class="page-title">Ustawienia</div>
-            <div class="faint" style="font-size: 12.5px" x-show="settings.dbPath">Zapisywane w SQLite: <span class="mono" x-text="settings.dbPath"></span> · nadpisują wartości z .env</div>
+            <div class="page-title" x-text="t('common.settings')"></div>
+            <div class="faint" style="font-size: 12.5px" x-show="settings.dbPath"><span x-text="t('settings.storedIn')"></span> <span class="mono" x-text="settings.dbPath"></span> <span x-text="t('settings.overridesEnv')"></span></div>
           </div>
           <div class="head-actions">
-            <button class="btn-ghost" x-show="dirtyCount" @click="discardSettings()">Odrzuć</button>
+            <button class="btn-ghost" x-show="dirtyCount" @click="discardSettings()" x-text="t('settings.discard')"></button>
             <button class="btn-primary" :disabled="!dirtyCount || settings.saving" @click="saveSettings()">
               <template x-if="settings.saving"><span class="spinner" style="border-top-color: var(--primary-text)"></span></template>
-              <span x-text="dirtyCount ? 'Zapisz zmiany (' + dirtyCount + ')' : 'Zapisano'"></span>
+              <span x-text="dirtyCount ? t('settings.save', { n: dirtyCount }) : t('settings.saved')"></span>
             </button>
           </div>
         </div>
         <div class="content">
           <template x-if="settings.loading && !settings.items.length"><div class="skeleton" style="width: 50%"></div></template>
-          <template x-if="settings.error"><div class="card"><div class="empty"><h3>Nie udało się wczytać ustawień</h3><span x-text="settings.error"></span></div></div></template>
+          <template x-if="settings.error"><div class="card"><div class="empty"><h3 x-text="t('settings.loadFailed')"></h3><span x-text="settings.error"></span></div></div></template>
           <div class="settings-layout" x-show="settings.items.length">
             <nav class="settings-nav">
               <template x-for="g in settings.groups" :key="g.id">
                 <button @click="scrollToGroup(g.id)">
                   <span x-text="g.label"></span>
-                  <span class="dot purple" x-show="groupItems(g.id).some(s => isDirty(s))" title="Niezapisane zmiany"></span>
+                  <span class="dot purple" x-show="groupItems(g.id).some(s => isDirty(s))" :title="t('settings.unsaved')"></span>
                 </button>
               </template>
             </nav>
@@ -605,7 +607,7 @@
                         <span class="test-result" x-show="tests[g.test] && !tests[g.test].loading" :class="tests[g.test]?.ok ? 'add' : 'del'" x-text="tests[g.test]?.message"></span>
                         <button class="btn-outline" @click="testConnection(g.test)" :disabled="tests[g.test]?.loading">
                           <template x-if="tests[g.test]?.loading"><span class="spinner"></span></template>
-                          Testuj połączenie
+                          <span x-text="t('settings.test')"></span>
                         </button>
                       </div>
                     </template>
@@ -640,8 +642,8 @@
                           <input class="input" :class="{ mono: s.type === 'list' || s.key.endsWith('_URL') || s.key.endsWith('PATTERN') }" type="text" :value="fieldValue(s)" :placeholder="s.placeholder || s.default" @input="setField(s, $event.target.value)" />
                         </template>
                         <div class="setting-actions">
-                          <button class="link" x-show="isDirty(s)" @click="undoField(s)">cofnij</button>
-                          <button class="link" x-show="s.source === 'ui' && !resets[s.key]" @click="resetField(s)" x-text="s.env_set ? 'przywróć z .env' : 'przywróć domyślne'"></button>
+                          <button class="link" x-show="isDirty(s)" @click="undoField(s)" x-text="t('settings.undo')"></button>
+                          <button class="link" x-show="s.source === 'ui' && !resets[s.key]" @click="resetField(s)" x-text="t(s.env_set ? 'settings.restoreEnv' : 'settings.restoreDefault')"></button>
                         </div>
                       </div>
                     </div>

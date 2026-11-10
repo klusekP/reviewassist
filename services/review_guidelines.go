@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"codereviewAI/services/ai"
+	"codereviewAI/services/i18n"
 )
 
 // securityChecklist is appended to every review prompt (agent and LLM engines).
@@ -116,8 +117,8 @@ func finalVerdict(modelVerdict string, issues []ai.Issue, reqs []ai.Requirement)
 	return computed
 }
 
-// requirementsLine is a one-line status of the requirements checklist, e.g. "Wymagania: 3/5 zrealizowane, 1 częściowo, 1 brak".
-func requirementsLine(reqs []ai.Requirement) string {
+// requirementsLine is a one-line status of the requirements checklist, e.g. "Requirements: 3/5 done, 1 partial, 1 missing".
+func requirementsLine(lang string, reqs []ai.Requirement) string {
 	if len(reqs) == 0 {
 		return ""
 	}
@@ -125,10 +126,10 @@ func requirementsLine(reqs []ai.Requirement) string {
 	for _, rq := range reqs {
 		counts[strings.ToLower(rq.Status)]++
 	}
-	line := fmt.Sprintf("Wymagania: %d/%d zrealizowane", counts["done"], len(reqs))
-	for _, st := range []struct{ key, label string }{{"partial", "częściowo"}, {"missing", "brak"}, {"unclear", "do weryfikacji"}} {
-		if counts[st.key] > 0 {
-			line += fmt.Sprintf(", %d %s", counts[st.key], st.label)
+	line := i18n.T(lang, "req.line", counts["done"], len(reqs))
+	for _, st := range []string{"partial", "missing", "unclear"} {
+		if counts[st] > 0 {
+			line += fmt.Sprintf(", %d %s", counts[st], i18n.T(lang, "req."+st))
 		}
 	}
 	return line
